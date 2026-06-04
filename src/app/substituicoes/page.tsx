@@ -69,9 +69,9 @@ function SubstituicoesContent() {
       if (!res.ok) throw new Error("Erro")
       const sugestao = await res.json()
 
-      const substituto = professores.find(
-        (p) => p.nome.toLowerCase() === sugestao.substituto.toLowerCase()
-      )
+      const nomeIa = String(sugestao.substituto || "").toLowerCase().trim()
+      const substituto = professores.find((p) => p.nome.toLowerCase() === nomeIa)
+        || professores.find((p) => p.nome.toLowerCase().includes(nomeIa) || nomeIa.includes(p.nome.toLowerCase()))
       if (substituto) {
         const { data: userData } = await supabase.auth.getUser()
         if (!userData.user) return

@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Loading } from "@/components/shared/loading"
 import { DIAS_SEMANA } from "@/lib/utils"
+import { persistGradeHorarios } from "@/lib/persist-ia"
 import { Calendar, Sparkles, Trash2 } from "lucide-react"
 import type { GradeHorario, Turma, Materia, Professor, Periodo } from "@/types/database"
 
@@ -64,6 +65,9 @@ function GradeContent() {
   async function handleGerarGrade() {
     setGerando(true)
     try {
+      const { data: userData } = await supabase.auth.getUser()
+      if (!userData.user) throw new Error("Não autenticado")
+
       const res = await fetch("/api/ia/gerar-grade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -72,11 +76,23 @@ function GradeContent() {
           gradeAtual: grade,
         }),
       })
-      if (!res.ok) throw new Error("Erro ao gerar grade")
-      const novaGrade = await res.json()
+      const payload = await res.json()
+      if (!res.ok) throw new Error(payload.error || "Erro ao gerar grade")
+
+      const resultado = await persistGradeHorarios(
+        supabase,
+        userData.user.id,
+        payload,
+        turmas.map((t) => ({ id: t.id, nome: t.nome })),
+        materias.map((m) => ({ id: m.id, nome: m.nome })),
+        professores.map((p) => ({ id: p.id, nome: p.nome })),
+        periodos.map((p) => ({ id: p.id, nome: p.nome }))
+      )
+      if (!resultado.ok) throw new Error(resultado.mensagem)
+      alert(resultado.mensagem)
       carregar()
     } catch (err) {
-      alert("Erro ao gerar grade. Verifique a chave da IA.")
+      alert(err instanceof Error ? err.message : "Erro ao gerar grade. Verifique a chave da IA.")
     }
     setGerando(false)
   }

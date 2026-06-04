@@ -48,15 +48,17 @@ function DashboardContent() {
 
     const escolaId = userData.user.id
 
-    const [turmasRes, profsRes, eventosRes] = await Promise.all([
+    const [turmasRes, profsRes, eventosRes, subsRes] = await Promise.all([
       supabase.from("turmas").select("*, serie:series(*)").eq("escola_id", escolaId),
       supabase.from("professores").select("*").eq("escola_id", escolaId),
       supabase.from("eventos_tempo_real").select("*, turma:turmas(*), professor:professores(*)").eq("escola_id", escolaId).order("created_at", { ascending: false }).limit(20),
+      supabase.from("substituicoes").select("id", { count: "exact", head: true }).eq("escola_id", escolaId).eq("status", "pendente"),
     ])
 
     if (turmasRes.data) setTurmas(turmasRes.data)
     if (profsRes.data) setProfessores(profsRes.data)
     if (eventosRes.data) setEventos(eventosRes.data)
+    setSubstituicoesPendentes(subsRes.count || 0)
     if (userData.user.email) setEscolaNome(userData.user.email.split("@")[0])
     setLoading(false)
   }, [supabase])
@@ -78,7 +80,7 @@ function DashboardContent() {
 
   const professoresPresentes = professores.filter((p) => p.status === "presente").length
   const professoresAusentes = professores.filter((p) => p.status === "ausente").length
-  const substituicoesPendentes = eventos.filter((e) => e.tipo === "substituicao").length
+  const [substituicoesPendentes, setSubstituicoesPendentes] = useState(0)
 
   if (loading) return <Loading />
 

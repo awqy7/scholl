@@ -33,9 +33,16 @@ function ProfessoresContent() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    nome: string
+    email: string
+    telefone: string
+    especialidades: string
+    status: Professor["status"]
+    carga_horaria: number
+  }>({
     nome: "", email: "", telefone: "", especialidades: "",
-    status: "presente" as const, carga_horaria: 20,
+    status: "presente", carga_horaria: 20,
   })
 
   const carregar = useCallback(async () => {

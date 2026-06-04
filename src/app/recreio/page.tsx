@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Loading, EmptyState } from "@/components/shared/loading"
 import { DIAS_SEMANA } from "@/lib/utils"
+import { persistRecreioIntercalado } from "@/lib/persist-ia"
 import { TreePine, Sparkles, Trash2 } from "lucide-react"
 import type { RecreioIntercalado, Turma } from "@/types/database"
 
@@ -54,20 +55,32 @@ function RecreioContent() {
   async function handleGerar() {
     setGerando(true)
     try {
+      const { data: userData } = await supabase.auth.getUser()
+      if (!userData.user) throw new Error("Não autenticado")
+
       const res = await fetch("/api/ia/gerar-recreio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          turmas: turmas.map((t) => ({ nome: t.nome, periodo: t.periodo })),
+          turmas: turmas.map((t) => ({ id: t.id, nome: t.nome, periodo: t.periodo })),
           espacosDisponiveis: 1,
           duracao,
         }),
       })
-      if (!res.ok) throw new Error("Erro")
-      await res.json()
+      const payload = await res.json()
+      if (!res.ok) throw new Error(payload.error || "Erro ao gerar recreio")
+
+      const resultado = await persistRecreioIntercalado(
+        supabase,
+        userData.user.id,
+        payload,
+        turmas.map((t) => ({ id: t.id, nome: t.nome, periodo: t.periodo }))
+      )
+      if (!resultado.ok) throw new Error(resultado.mensagem)
+      alert(resultado.mensagem)
       carregar()
     } catch (err) {
-      alert("Erro ao gerar recreio. Chave IA necessária.")
+      alert(err instanceof Error ? err.message : "Erro ao gerar recreio. Chave IA necessária.")
     }
     setGerando(false)
   }

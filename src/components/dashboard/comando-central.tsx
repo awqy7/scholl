@@ -3,7 +3,14 @@
 import { useState, useRef, useEffect } from "react"
 import { useChat } from "@/lib/chat-context"
 import { createClient } from "@/lib/supabase/client"
+import { persistGradeHorarios, persistRecreioIntercalado } from "@/lib/persist-ia"
 import { Bot, Send, X, Loader2, Paperclip, Trash2 } from "lucide-react"
+
+function nomeRelacao(rel: unknown): string {
+  if (!rel) return "?"
+  if (Array.isArray(rel)) return (rel[0] as { nome?: string })?.nome || "?"
+  return (rel as { nome?: string }).nome || "?"
+}
 
 export function ComandoCentral() {
   const { mensagens, addMensagem, limpar } = useChat()
@@ -306,7 +313,7 @@ export function ComandoCentral() {
       case "professores_por_especialidade": {
         const esp = (params.especialidade || params.nome || "").toLowerCase()
         const { data } = await supabase.from("professores").select("nome, especialidades, status").eq("escola_id", escolaId)
-        const filtrados = esp ? data?.filter((p) => p.especialidades?.some((e) => e.toLowerCase().includes(esp))) : data
+        const filtrados = esp ? data?.filter((p) => p.especialidades?.some((e: string) => e.toLowerCase().includes(esp))) : data
         if (!filtrados?.length) return { ok: true, mensagem: esp ? `Nenhum professor com especialidade "${esp}"` : "Nenhum professor cadastrado." }
         return { ok: true, mensagem: `**${esp ? `Professores de ${esp}` : "Todos os professores"} (${filtrados.length}):**\n${filtrados.map((p) => `${p.nome} - ${p.status} [${(p.especialidades||[]).join(", ")}]`).join("\n")}` }
       }
@@ -323,30 +330,36 @@ export function ComandoCentral() {
       case "listar_faltas": {
         const { data } = await supabase.from("faltas").select("*, professor:professores(nome)").eq("escola_id", escolaId).order("created_at", { ascending: false }).limit(20)
         if (!data?.length) return { ok: true, mensagem: "Nenhuma falta registrada." }
-        return { ok: true, mensagem: `**Últimas Faltas:**\n${data.map((f) => `${f.professor?.nome || "?"} - ${f.data} - ${f.motivo} (${f.status})`).join("\n")}` }
+        return { ok: true, mensagem: `**Últimas Faltas:**\n${data.map((f) => `${nomeRelacao(f.professor)} - ${f.data} - ${f.motivo} (${f.status})`).join("\n")}` }
       }
       case "deletar_falta": {
         const nome = params.professor_nome || params.nome || params.busca
         if (!nome) return { ok: false, mensagem: "Informe o nome do professor." }
-        const { data: faltas } = await supabase.from("faltas").select("id, data, professor:professores!inner(nome)").eq("escola_id", escolaId).ilike("professores.nome", `%${nome}%`).order("created_at", { ascending: false }).limit(1)
-        if (!faltas?.length) return { ok: false, mensagem: `Nenhuma falta encontrada para "${nome}"` }
+        const { data: profs } = await supabase.from("professores").select("id, nome").eq("escola_id", escolaId).ilike("nome", `%${nome}%`).limit(1)
+        if (!profs?.length) return { ok: false, mensagem: `Professor "${nome}" não encontrado` }
+        const { data: faltas } = await supabase.from("faltas").select("id").eq("escola_id", escolaId).eq("professor_id", profs[0].id).order("created_at", { ascending: false }).limit(1)
+        if (!faltas?.length) return { ok: false, mensagem: `Nenhuma falta encontrada para "${profs[0].nome}"` }
         await supabase.from("faltas").delete().eq("id", faltas[0].id)
-        return { ok: true, mensagem: `Falta de ${faltas[0].professor?.nome || nome} removida!` }
+        return { ok: true, mensagem: `Falta de ${profs[0].nome} removida!` }
       }
       case "justificar_falta": {
         const nome = params.professor_nome || params.nome || params.busca
         if (!nome) return { ok: false, mensagem: "Informe o nome do professor." }
-        const { data: faltas } = await supabase.from("faltas").select("id, data, professor:professores!inner(nome)").eq("escola_id", escolaId).ilike("professores.nome", `%${nome}%`).eq("status", "injustificada").limit(1)
-        if (!faltas?.length) return { ok: false, mensagem: `Nenhuma falta injustificada para "${nome}"` }
+        const { data: profs } = await supabase.from("professores").select("id, nome").eq("escola_id", escolaId).ilike("nome", `%${nome}%`).limit(1)
+        if (!profs?.length) return { ok: false, mensagem: `Professor "${nome}" não encontrado` }
+        const { data: faltas } = await supabase.from("faltas").select("id").eq("escola_id", escolaId).eq("professor_id", profs[0].id).eq("status", "injustificada").limit(1)
+        if (!faltas?.length) return { ok: false, mensagem: `Nenhuma falta injustificada para "${profs[0].nome}"` }
         await supabase.from("faltas").update({ status: "justificada", motivo: params.motivo || "Justificado via IA" }).eq("id", faltas[0].id)
-        return { ok: true, mensagem: `Falta de ${faltas[0].professor?.nome || nome} justificada!` }
+        return { ok: true, mensagem: `Falta de ${profs[0].nome} justificada!` }
       }
       case "faltas_do_professor": {
         const nome = params.nome || params.busca || params.professor_nome
         if (!nome) return { ok: false, mensagem: "Informe o nome do professor." }
-        const { data: faltas } = await supabase.from("faltas").select("data, motivo, status, professor:professores(nome)").eq("escola_id", escolaId).ilike("professores.nome", `%${nome}%`).order("data", { ascending: false })
-        if (!faltas?.length) return { ok: true, mensagem: `Nenhuma falta para "${nome}"` }
-        return { ok: true, mensagem: `**Faltas de ${faltas[0]?.professor?.nome || nome}:**\n${faltas.map((f) => `${f.data} - ${f.motivo} (${f.status})`).join("\n")}` }
+        const { data: profs } = await supabase.from("professores").select("id, nome").eq("escola_id", escolaId).ilike("nome", `%${nome}%`).limit(1)
+        if (!profs?.length) return { ok: false, mensagem: `Professor "${nome}" não encontrado` }
+        const { data: faltas } = await supabase.from("faltas").select("data, motivo, status").eq("escola_id", escolaId).eq("professor_id", profs[0].id).order("data", { ascending: false })
+        if (!faltas?.length) return { ok: true, mensagem: `Nenhuma falta para "${profs[0].nome}"` }
+        return { ok: true, mensagem: `**Faltas de ${profs[0].nome}:**\n${faltas.map((f) => `${f.data} - ${f.motivo} (${f.status})`).join("\n")}` }
       }
       case "professor_mais_faltas": {
         const { data } = await supabase.from("faltas").select("professor_id, professor:professores(nome)").eq("escola_id", escolaId)
@@ -354,7 +367,9 @@ export function ComandoCentral() {
         const contagem: Record<string, { nome: string, count: number }> = {}
         for (const f of data) {
           const key = f.professor_id
-          if (!contagem[key]) contagem[key] = { nome: f.professor?.nome || "?", count: 0 }
+          const prof = f.professor as { nome?: string } | { nome?: string }[] | null
+          const nomeProf = Array.isArray(prof) ? prof[0]?.nome : prof?.nome
+          if (!contagem[key]) contagem[key] = { nome: nomeProf || "?", count: 0 }
           contagem[key].count++
         }
         const ranking = Object.values(contagem).sort((a, b) => b.count - a.count).slice(0, 5)
@@ -365,7 +380,7 @@ export function ComandoCentral() {
       case "listar_substituicoes": {
         const { data } = await supabase.from("substituicoes").select("*, professor_original:professores!professor_original_id(nome), professor_substituto:professores!professor_substituto_id(nome)").eq("escola_id", escolaId).order("created_at", { ascending: false }).limit(20)
         if (!data?.length) return { ok: true, mensagem: "Nenhuma substituição registrada." }
-        return { ok: true, mensagem: `**Substituições:**\n${data.map((s) => `${s.professor_original?.nome} → ${s.professor_substituto?.nome} (${s.data}) - ${s.status}`).join("\n")}` }
+        return { ok: true, mensagem: `**Substituições:**\n${data.map((s) => `${nomeRelacao(s.professor_original)} → ${nomeRelacao(s.professor_substituto)} (${s.data}) - ${s.status}`).join("\n")}` }
       }
       case "sugerir_substituto": {
         const nome = params.professor_nome || params.nome || params.busca
@@ -382,7 +397,7 @@ export function ComandoCentral() {
         const { data } = await supabase.from("substituicoes").select("id, professor_original:professores!professor_original_id(nome), professor_substituto:professores!professor_substituto_id(nome)").eq("escola_id", escolaId).eq("status", "pendente").limit(1)
         if (!data?.length) return { ok: true, mensagem: "Nenhuma substituição pendente." }
         await supabase.from("substituicoes").update({ status: "confirmada" }).eq("id", data[0].id)
-        return { ok: true, mensagem: `Substituição confirmada: ${data[0].professor_substituto?.nome} → ${data[0].professor_original?.nome}` }
+        return { ok: true, mensagem: `Substituição confirmada: ${nomeRelacao(data[0].professor_substituto)} substituindo ${nomeRelacao(data[0].professor_original)}` }
       }
       case "recusar_substituicao": {
         const { data } = await supabase.from("substituicoes").select("id").eq("escola_id", escolaId).eq("status", "pendente").limit(1)
@@ -399,19 +414,47 @@ export function ComandoCentral() {
 
       // ===== PLANEJAMENTO =====
       case "criar_planejamento": {
-        const desc = params.descricao || params.conteudo || params.nome
-        const [tRes, mRes, pRes] = await Promise.all([
-          supabase.from("turmas").select("id").eq("escola_id", escolaId).limit(1),
-          supabase.from("materias").select("id").eq("escola_id", escolaId).limit(1),
-          supabase.from("professores").select("id").eq("escola_id", escolaId).limit(1),
+        const desc = String(params.descricao || params.conteudo || params.nome || "")
+        if (!desc) return { ok: false, mensagem: "Informe o conteúdo do planejamento." }
+
+        async function resolverId(
+          tabela: "turmas" | "materias" | "professores",
+          idParam?: unknown,
+          nomeParam?: unknown
+        ) {
+          if (idParam) return String(idParam)
+          const nome = nomeParam ? String(nomeParam) : ""
+          if (!nome) return null
+          const { data } = await supabase.from(tabela).select("id").eq("escola_id", escolaId).ilike("nome", `%${nome}%`).limit(1)
+          return data?.[0]?.id || null
+        }
+
+        const turmaId = await resolverId("turmas", params.turma_id, params.turma_nome || params.turma)
+        const materiaId = await resolverId("materias", params.materia_id, params.materia_nome || params.materia)
+        const professorId = await resolverId("professores", params.professor_id, params.professor_nome || params.professor)
+
+        const [tFallback, mFallback, pFallback] = await Promise.all([
+          turmaId ? Promise.resolve({ data: [{ id: turmaId }] }) : supabase.from("turmas").select("id").eq("escola_id", escolaId).limit(1),
+          materiaId ? Promise.resolve({ data: [{ id: materiaId }] }) : supabase.from("materias").select("id").eq("escola_id", escolaId).limit(1),
+          professorId ? Promise.resolve({ data: [{ id: professorId }] }) : supabase.from("professores").select("id").eq("escola_id", escolaId).limit(1),
         ])
-        if (!tRes.data?.length || !mRes.data?.length || !pRes.data?.length) {
+        if (!tFallback.data?.length || !mFallback.data?.length || !pFallback.data?.length) {
           return { ok: false, mensagem: "Crie turmas, matérias e professores antes." }
         }
+
+        const hoje = new Date()
+        const dia = hoje.getDay()
+        const diff = hoje.getDate() - dia + (dia === 0 ? -6 : 1)
+        const segunda = new Date(hoje.setDate(diff))
+
         const { error } = await supabase.from("planejamento_semanal").insert({
-          escola_id: escolaId, turma_id: tRes.data[0].id, materia_id: mRes.data[0].id,
-          professor_id: pRes.data[0].id, semana_inicio: new Date().toISOString().split("T")[0],
-          dia_semana: new Date().getDay(), conteudo: desc, objetivos: desc,
+          escola_id: escolaId,
+          turma_id: tFallback.data[0].id,
+          materia_id: mFallback.data[0].id,
+          professor_id: pFallback.data[0].id,
+          semana_inicio: segunda.toISOString().split("T")[0],
+          conteudo: desc,
+          objetivos: String(params.objetivos || desc),
         })
         if (error) return { ok: false, mensagem: `Erro: ${error.message}` }
         return { ok: true, mensagem: `Planejamento criado: "${desc.substring(0, 50)}"` }
@@ -434,7 +477,7 @@ export function ComandoCentral() {
       case "listar_planejamentos": {
         const { data } = await supabase.from("planejamento_semanal").select("*, turma:turmas(nome), materia:materias(nome), professor:professores(nome)").eq("escola_id", escolaId).order("created_at", { ascending: false }).limit(20)
         if (!data?.length) return { ok: true, mensagem: "Nenhum planejamento cadastrado." }
-        return { ok: true, mensagem: `**Planejamentos:**\n${data.map((p) => `${p.turma?.nome || "?"} - ${p.materia?.nome || "?"} - ${p.conteudo?.substring(0, 40)}`).join("\n")}` }
+        return { ok: true, mensagem: `**Planejamentos:**\n${data.map((p) => `${nomeRelacao(p.turma)} - ${nomeRelacao(p.materia)} - ${p.conteudo?.substring(0, 40)}`).join("\n")}` }
       }
 
       // ===== GRADE HORARIA =====
@@ -454,16 +497,12 @@ export function ComandoCentral() {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ turmas: tRes.data, materias: mRes.data, professores: pRes.data, periodos: perRes.data, gradeAtual: gRes.data || [] }),
           })
-          if (!apiRes.ok) { const e = await apiRes.text(); return { ok: false, mensagem: `IA grade: ${e}` } }
-          const novaGrade = await apiRes.json()
-          if (novaGrade.error) return { ok: false, mensagem: `Erro IA: ${novaGrade.error}` }
-          if (!Array.isArray(novaGrade) || !novaGrade.length) return { ok: false, mensagem: "IA não retornou grade válida." }
-          await supabase.from("grade_horarios").delete().eq("escola_id", escolaId)
-          const inserir = novaGrade.map((a: any) => ({ ...a, escola_id: escolaId }))
-          const { error } = await supabase.from("grade_horarios").insert(inserir)
-          if (error) return { ok: false, mensagem: `Erro ao salvar grade: ${error.message}` }
-          return { ok: true, mensagem: `Grade horária gerada com ${inserir.length} aulas!` }
-        } catch (e: any) { return { ok: false, mensagem: `Erro: ${e.message || "desconhecido"}` } }
+          const payload = await apiRes.json()
+          if (!apiRes.ok) return { ok: false, mensagem: payload.error || `IA grade: ${apiRes.status}` }
+          return await persistGradeHorarios(supabase, escolaId, payload, tRes.data, mRes.data, pRes.data, perRes.data)
+        } catch (e) {
+          return { ok: false, mensagem: `Erro: ${e instanceof Error ? e.message : "desconhecido"}` }
+        }
       }
       case "limpar_grade": {
         await supabase.from("grade_horarios").delete().eq("escola_id", escolaId)
@@ -478,7 +517,11 @@ export function ComandoCentral() {
         const { data } = await supabase.from("grade_horarios").select("dia_semana, materia:materias(nome), professor:professores(nome), periodo:periodos(nome, hora_inicio)").eq("escola_id", escolaId).eq("turma_id", turmas[0].id).order("dia_semana")
         if (!data?.length) return { ok: true, mensagem: `Grade vazia para "${turmas[0].nome}".` }
         const dias = ["Seg", "Ter", "Qua", "Qui", "Sex"]
-        const linhas = data.map((a) => `${dias[a.dia_semana]||a.dia_semana} - ${a.materia?.nome||"?"} (${a.professor?.nome||"?"}) ${a.periodo?.hora_inicio||""}`)
+        const linhas = data.map((a) => {
+          const periodo = a.periodo as { hora_inicio?: string } | { hora_inicio?: string }[] | null
+          const hora = Array.isArray(periodo) ? periodo[0]?.hora_inicio : periodo?.hora_inicio
+          return `${dias[a.dia_semana]||a.dia_semana} - ${nomeRelacao(a.materia)} (${nomeRelacao(a.professor)}) ${hora || ""}`
+        })
         return { ok: true, mensagem: `**Grade - ${turmas[0].nome}:**\n${linhas.join("\n")}` }
       }
       case "verificar_conflitos": {
@@ -492,7 +535,7 @@ export function ComandoCentral() {
         }
         const conflitos = Object.values(grupos).filter((g) => g.length > 1)
         if (!conflitos.length) return { ok: true, mensagem: "Nenhum conflito encontrado na grade!" }
-        const lista = conflitos.map((g) => `⚠ ${g[0].professor?.nome||"?"} - dia ${g[0].dia_semana} (${g.length}x)`).join("\n")
+        const lista = conflitos.map((g) => `⚠ ${nomeRelacao(g[0].professor)} - dia ${g[0].dia_semana} (${g.length}x)`).join("\n")
         return { ok: true, mensagem: `**Conflitos encontrados (${conflitos.length}):**\n${lista}` }
       }
       case "adicionar_aula": {
@@ -520,35 +563,24 @@ export function ComandoCentral() {
         const { data: grade } = await supabase.from("grade_horarios").select("id, materia:materias(nome)").eq("escola_id", escolaId).limit(1)
         if (!grade?.length) return { ok: true, mensagem: "Grade vazia." }
         await supabase.from("grade_horarios").delete().eq("id", grade[0].id)
-        return { ok: true, mensagem: `Aula de ${grade[0].materia?.nome||"?"} removida!` }
+        return { ok: true, mensagem: `Aula de ${nomeRelacao(grade[0].materia)} removida!` }
       }
 
       // ===== RECREIO =====
       case "gerar_recreio": {
         try {
-          const [tRes, perRes, recRes] = await Promise.all([
-            supabase.from("turmas").select("id, nome, periodo").eq("escola_id", escolaId),
-            supabase.from("periodos").select("*").eq("escola_id", escolaId).order("ordem"),
-            supabase.from("recreio_intercalado").select("*").eq("escola_id", escolaId),
-          ])
-          if (!tRes.data?.length) return { ok: false, mensagem: "Crie turmas primeiro." }
+          const { data: turmasData } = await supabase.from("turmas").select("id, nome, periodo").eq("escola_id", escolaId)
+          if (!turmasData?.length) return { ok: false, mensagem: "Crie turmas primeiro." }
           const apiRes = await fetch("/api/ia/gerar-recreio", {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ turmas: tRes.data, espacosDisponiveis: 2, duracao: 20 }),
+            body: JSON.stringify({ turmas: turmasData, espacosDisponiveis: 2, duracao: 20 }),
           })
-          if (!apiRes.ok) { const e = await apiRes.text(); return { ok: false, mensagem: `IA recreio: ${e}` } }
-          const horarios = await apiRes.json()
-          if (horarios.error) return { ok: false, mensagem: `Erro IA: ${horarios.error}` }
-          if (!Array.isArray(horarios) || !horarios.length) return { ok: false, mensagem: "IA não retornou horários válidos." }
-          await supabase.from("recreio_intercalado").delete().eq("escola_id", escolaId)
-          const inserir = horarios.map((h: any) => {
-            const turma = tRes.data.find((t) => t.nome === h.turma_nome || t.id === h.turma_id)
-            return { escola_id: escolaId, turma_id: turma?.id || tRes.data[0].id, dia_semana: h.dia_semana ?? 0, hora_inicio: h.hora_inicio || "10:00", hora_fim: h.hora_fim || "10:20" }
-          })
-          const { error } = await supabase.from("recreio_intercalado").insert(inserir)
-          if (error) return { ok: false, mensagem: `Erro ao salvar recreio: ${error.message}` }
-          return { ok: true, mensagem: `Recreios organizados para ${inserir.length} turmas!` }
-        } catch (e: any) { return { ok: false, mensagem: `Erro: ${e.message || "desconhecido"}` } }
+          const payload = await apiRes.json()
+          if (!apiRes.ok) return { ok: false, mensagem: payload.error || `IA recreio: ${apiRes.status}` }
+          return await persistRecreioIntercalado(supabase, escolaId, payload, turmasData)
+        } catch (e) {
+          return { ok: false, mensagem: `Erro: ${e instanceof Error ? e.message : "desconhecido"}` }
+        }
       }
 
       // ===== EVENTOS =====
@@ -592,8 +624,21 @@ export function ComandoCentral() {
         const formData = new FormData()
         formData.append("file", anexo)
         formData.append("professor", textoUsuario)
-        await fetch("/api/upload", { method: "POST", body: formData })
+        const upRes = await fetch("/api/upload", { method: "POST", body: formData })
+        const upData = await upRes.json().catch(() => ({}))
+        if (!upRes.ok) {
+          addMensagem({ role: "assistant", content: upData.error || "Erro ao enviar atestado." })
+          setLoading(false)
+          return
+        }
+        if (upData.faltaRegistrada) {
+          addMensagem({ role: "assistant", content: upData.message || "Atestado enviado e falta registrada." })
+        }
         setAnexo(null)
+        if (!textoUsuario.trim()) {
+          setLoading(false)
+          return
+        }
       }
 
       // 1. Manda pro servidor pra interpretar
@@ -615,7 +660,8 @@ export function ComandoCentral() {
 
       // 2. Executa a ação no CLIENTE (com a sessão correta)
       const resultado = await executarAcao(data.acao, data.params)
-      addMensagem({ role: "assistant", content: resultado.mensagem || "Comando executado!" })
+      const prefix = resultado.ok ? "✅ " : "❌ "
+      addMensagem({ role: "assistant", content: prefix + (resultado.mensagem || "Comando executado!") })
     } catch {
       addMensagem({ role: "assistant", content: "❌ Erro ao processar comando." })
     }

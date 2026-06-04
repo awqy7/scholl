@@ -108,7 +108,6 @@ export interface PlanejamentoSemanal {
   materia_id: string
   professor_id: string
   semana_inicio: string
-  dia_semana: number
   conteudo: string
   objetivos: string
   created_at: string

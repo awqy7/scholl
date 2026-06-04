@@ -1,31 +1,35 @@
-import { chamarIAJson } from "@/lib/ia-client"
+import { NextResponse } from "next/server"
+import { chamarIAArray } from "@/lib/ia-client"
+import { requireApiUser } from "@/lib/api-auth"
 
 export async function POST(request: Request) {
+  const auth = await requireApiUser()
+  if ("response" in auth) return auth.response
+
   try {
     const body = await request.json()
     const { turmas, materias, professores, periodos, gradeAtual } = body
 
-    const result = await chamarIAJson([
-      {
-        role: "system",
-        content: `Você é um especialista em gestão escolar criando grade horária semanal.
-Regras:
-- Distribua as matérias uniformemente na semana (seg-sex)
-- Um professor NÃO pode estar em duas turmas ao mesmo tempo
-- Respeite carga horária dos professores
-- Priorize professores com especialidades compatíveis
-- Retorne JSON array com objetos: turma_id, materia_id, professor_id, dia_semana (0-4), periodo_id
-Analise a grade atual (se existir) e melhore-a.`,
-      },
-      {
-        role: "user",
-        content: JSON.stringify({ turmas, materias, professores, periodos, gradeAtual }),
-      },
-    ])
+    const aulas = await chamarIAArray(
+      [
+        {
+          role: "system",
+          content: `Você cria grade horária escolar semanal (seg-sex, dia_semana 0-4).
+Regras: sem conflito de professor no mesmo horário; respeitar carga horária; especialidades compatíveis.
+Retorne JSON: { "aulas": [ { "turma_id", "materia_id", "professor_id", "dia_semana", "periodo_id" } ] }
+Use APENAS ids fornecidos nos dados.`,
+        },
+        {
+          role: "user",
+          content: JSON.stringify({ turmas, materias, professores, periodos, gradeAtual }),
+        },
+      ],
+      ["aulas", "grade", "horarios", "items"]
+    )
 
-    return Response.json(result)
+    return NextResponse.json(aulas)
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erro"
-    return Response.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

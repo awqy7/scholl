@@ -1,3 +1,5 @@
+import { extractJsonArray, parseIaJsonContent } from "./ia-utils"
+
 const PROVIDER = process.env.NEXT_PUBLIC_IA_PROVIDER || "openrouter"
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -28,11 +30,11 @@ export async function chamarIA(
   const url = isGroq ? GROQ_URL : OPENROUTER_URL
   const model = modelOverride || (isGroq ? GROQ_MODEL : OPENROUTER_MODEL)
 
-  const body: any = {
+  const body: Record<string, unknown> = {
     model,
     messages,
     temperature: config.temperature ?? 0.3,
-    max_tokens: 2000,
+    max_tokens: 4000,
   }
 
   if (config.response_format) {
@@ -62,10 +64,20 @@ export async function chamarIA(
 export async function chamarIAJson(
   messages: IaMessage[],
   config: IaConfig = {}
-) {
+): Promise<unknown> {
   const content = await chamarIA(messages, {
     ...config,
     response_format: { type: "json_object" },
   })
-  return JSON.parse(content.replace(/```json|```/g, "").trim())
+  return parseIaJsonContent(content)
+}
+
+/** IA que retorna array (grade, recreio) com chave wrapper no JSON */
+export async function chamarIAArray(
+  messages: IaMessage[],
+  arrayKeys: string[],
+  config: IaConfig = {}
+): Promise<Record<string, unknown>[]> {
+  const parsed = await chamarIAJson(messages, config)
+  return extractJsonArray(parsed, arrayKeys)
 }

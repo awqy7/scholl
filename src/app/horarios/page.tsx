@@ -33,8 +33,14 @@ function HorariosContent() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState({
-    nome: "", tipo: "aula" as const, hora_inicio: "08:00", hora_fim: "08:50", ordem: 1,
+  const [form, setForm] = useState<{
+    nome: string
+    tipo: Periodo["tipo"]
+    hora_inicio: string
+    hora_fim: string
+    ordem: number
+  }>({
+    nome: "", tipo: "aula", hora_inicio: "08:00", hora_fim: "08:50", ordem: 1,
   })
 
   const carregar = useCallback(async () => {
