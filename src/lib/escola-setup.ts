@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { getConfigTipo, normalizarTipoEscola } from "@/lib/escola-tipo"
+import { garantirPeriodosParaGrade } from "@/lib/garantir-periodos-grade"
 
 export interface SetupEscolaResult {
   series: number
@@ -121,6 +122,12 @@ export async function garantirDadosEscola(
       stats.periodos = pers.length
       linhas.push(`• ${pers.length} períodos de aula`)
     }
+  }
+
+  const prepPeriodos = await garantirPeriodosParaGrade(supabase, escolaId)
+  if (prepPeriodos.criados > 0) {
+    stats.periodos += prepPeriodos.criados
+    linhas.push(`• ${prepPeriodos.criados} períodos vespertinos (para turmas da tarde)`)
   }
 
   const totalCriados =

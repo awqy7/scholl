@@ -98,7 +98,7 @@ REGRAS DE PARAMS (cadastro em lote — OBRIGATÓRIO):
 - deletar_*: { nome ou busca } — use SEMPRE "deletar_professor" (nunca excluir_professor)
 - deletar todos: { todos: true } ou { nome: "todos" }
 - registrar_falta: { professor_nome, motivo?, data? }
-- gerar_grade / gerar_recreio / limpar_grade: {} (cria dados faltantes automaticamente antes de executar)
+- gerar_grade / gerar_recreio / limpar_grade: {} (cria dados faltantes automaticamente antes de executar). REGRA GRADE: um professor só pode lecionar em UMA turma por horário (dia+período); máx. 2 aulas seguidas no mesmo dia.
 - montar_escola_completa / gerar_tudo: { gerar_grade?: true, gerar_recreio?: true } — cria séries, turmas, professores, matérias, períodos e gera grade/recreio
 - adicionar_aula: { turma_nome, materia_nome, professor_nome, dia_semana?: 0-4 }
 - alterar_status_professor: { nome, status: "presente"|"ausente"|"ferias"|"licenca"|"atestado" }

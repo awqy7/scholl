@@ -1706,7 +1706,7 @@ export function ComandoCentral() {
 
           if (deveGerarGrade) {
             const [tRes, mRes, pRes, perRes, gRes] = await Promise.all([
-              supabase.from("turmas").select("id, nome").eq("escola_id", escolaId),
+              supabase.from("turmas").select("id, nome, periodo").eq("escola_id", escolaId),
               supabase.from("materias").select("id, nome").eq("escola_id", escolaId),
               supabase
                 .from("professores")
@@ -1888,37 +1888,29 @@ export function ComandoCentral() {
       }
 
       case "verificar_conflitos": {
-        const { data } = await supabase
-          .from("grade_horarios")
-          .select("professor_id, dia_semana, periodo_id, professor:professores(nome)")
-          .eq("escola_id", escolaId)
-        if (!data?.length)
+        const { validarGrade } = await import("@/lib/grade-gerador")
+        const [gRes, tRes, pRes, perRes] = await Promise.all([
+          supabase.from("grade_horarios").select("turma_id, materia_id, professor_id, dia_semana, periodo_id").eq("escola_id", escolaId),
+          supabase.from("turmas").select("id, nome").eq("escola_id", escolaId),
+          supabase.from("professores").select("id, nome, especialidades").eq("escola_id", escolaId),
+          supabase.from("periodos").select("id, nome, tipo, ordem").eq("escola_id", escolaId).order("ordem"),
+        ])
+        if (!gRes.data?.length)
           return { ok: true, mensagem: "Grade vazia, nenhum conflito possível." }
 
-        const grupos: Record<string, typeof data> = {}
-        for (const a of data) {
-          const key = `${a.professor_id}-${a.dia_semana}-${a.periodo_id}`
-          if (!grupos[key]) grupos[key] = []
-          grupos[key].push(a)
-        }
-
-        const conflitos = Object.values(grupos).filter((g) => g.length > 1)
-        if (!conflitos.length)
+        const periodosAula = (perRes.data || []).filter((p) => p.tipo === "aula")
+        const v = validarGrade(gRes.data, periodosAula, tRes.data || [], pRes.data || [])
+        if (v.ok)
           return {
             ok: true,
-            mensagem: "✅ **Nenhum conflito encontrado!** A grade está bem organizada.",
+            mensagem:
+              "✅ **Grade válida!** Todas as salas, sem professor em dois lugares ao mesmo tempo e no máximo 2 aulas seguidas.",
           }
 
-        const dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"]
-        const lista = conflitos
-          .map(
-            (g) =>
-              `⚠️ **${nomeRelacao(g[0].professor)}** — ${dias[g[0].dia_semana] || g[0].dia_semana} (${g.length} aulas sobrepostas)`
-          )
-          .join("\n")
+        const lista = [...v.conflitos, ...v.sequenciasLongas].map((m) => `⚠️ ${m}`).join("\n")
         return {
           ok: false,
-          mensagem: `**⚠️ Conflitos Encontrados (${conflitos.length}):**\n\n${lista}\n\nDiga _"gere a grade novamente"_ para corrigir.`,
+          mensagem: `**⚠️ Problemas na grade (${v.conflitos.length + v.sequenciasLongas.length}):**\n\n${lista}\n\nDiga _"gere a grade horária"_ para recriar todas as salas.`,
         }
       }
 
@@ -1967,16 +1959,58 @@ export function ComandoCentral() {
           }
         }
 
+        const profId = pRes.data[0].id
+        const turmaId = tRes.data[0].id
+        const periodoId = perRes.data[0].id
+
+        const { data: profOcupado } = await supabase
+          .from("grade_horarios")
+          .select("id, turma:turmas(nome)")
+          .eq("escola_id", escolaId)
+          .eq("professor_id", profId)
+          .eq("dia_semana", dia)
+          .eq("periodo_id", periodoId)
+          .maybeSingle()
+
+        if (profOcupado) {
+          const sala = nomeRelacao(profOcupado.turma)
+          return {
+            ok: false,
+            mensagem: `❌ **${pNome || "Professor"}** já leciona em **${sala}** neste horário. Um professor só pode estar em **uma turma por vez**.`,
+          }
+        }
+
+        const { data: turmaOcupada } = await supabase
+          .from("grade_horarios")
+          .select("id")
+          .eq("turma_id", turmaId)
+          .eq("dia_semana", dia)
+          .eq("periodo_id", periodoId)
+          .maybeSingle()
+
+        if (turmaOcupada) {
+          return {
+            ok: false,
+            mensagem: `❌ Esta turma já tem aula neste horário. Remova a aula atual ou escolha outro período.`,
+          }
+        }
+
         const { error } = await supabase.from("grade_horarios").insert({
           escola_id: escolaId,
-          turma_id: tRes.data[0].id,
+          turma_id: turmaId,
           materia_id: mRes.data[0].id,
-          professor_id: pRes.data[0].id,
+          professor_id: profId,
           dia_semana: dia,
-          periodo_id: perRes.data[0].id,
+          periodo_id: periodoId,
         })
 
-        if (error) return { ok: false, mensagem: `Erro: ${error.message}` }
+        if (error) {
+          const msg =
+            error.code === "23505"
+              ? "Conflito: professor já está em outra turma neste mesmo horário."
+              : error.message
+          return { ok: false, mensagem: `Erro: ${msg}` }
+        }
         const dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"]
         return {
           ok: true,

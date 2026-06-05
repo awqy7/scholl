@@ -1,5 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { extractJsonArray } from "./ia-utils"
+import {
+  filtrarAulasSemConflitoHorario,
+  validarGrade,
+  type AulaGradeInput,
+  type PeriodoGrade,
+} from "./grade-gerador"
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function resolveId(
   value: unknown,
@@ -9,10 +18,11 @@ function resolveId(
   if (value == null) return null
   const s = String(value).trim()
   if (byId.has(s)) return s
+  if (UUID_RE.test(s)) return null
   const lower = s.toLowerCase()
   if (byNome.has(lower)) return byNome.get(lower)!
   for (const [nome, id] of byNome) {
-    if (nome.includes(lower) || lower.includes(nome)) return id
+    if (nome === lower) return id
   }
   return null
 }
@@ -34,7 +44,7 @@ export async function persistGradeHorarios(
   turmas: { id: string; nome: string }[],
   materias: { id: string; nome: string }[],
   professores: { id: string; nome: string }[],
-  periodos: { id: string; nome: string }[]
+  periodos: { id: string; nome: string; tipo?: string; ordem?: number }[]
 ): Promise<{ ok: boolean; count: number; mensagem: string }> {
   const rows = extractJsonArray(raw, ["aulas", "grade", "horarios", "items"])
   if (!rows.length) {
@@ -86,11 +96,57 @@ export async function persistGradeHorarios(
     }
   }
 
-  await supabase.from("grade_horarios").delete().eq("escola_id", escolaId)
-  const { error } = await supabase.from("grade_horarios").insert(inserir)
-  if (error) return { ok: false, count: 0, mensagem: `Erro ao salvar grade: ${error.message}` }
+  const periodosComTipo = periodos as PeriodoGrade[]
+  const periodosAula = periodosComTipo.filter((p) => p.tipo === "aula")
+  const { aulas: semConflito, ignoradas } = filtrarAulasSemConflitoHorario(
+    inserir as AulaGradeInput[]
+  )
 
-  return { ok: true, count: inserir.length, mensagem: `Grade horária salva com ${inserir.length} aula(s)!` }
+  if (!semConflito.length) {
+    return {
+      ok: false,
+      count: 0,
+      mensagem:
+        "Nenhuma aula válida: cada professor só pode estar em uma turma por horário.",
+    }
+  }
+
+  const validacao = validarGrade(
+    semConflito,
+    periodosAula.length ? periodosAula : periodosComTipo.map((p, i) => ({ ...p, tipo: "aula", ordem: i + 1 })),
+    turmas,
+    professores.map((p) => ({ ...p, especialidades: [] }))
+  )
+
+  if (!validacao.ok) {
+    const detalhes = [...validacao.conflitos, ...validacao.sequenciasLongas].slice(0, 3).join("; ")
+    return {
+      ok: false,
+      count: 0,
+      mensagem: `Grade inválida: ${detalhes}. Gere a grade novamente.`,
+    }
+  }
+
+  await supabase.from("grade_horarios").delete().eq("escola_id", escolaId)
+  const { error } = await supabase.from("grade_horarios").insert(semConflito)
+  if (error) {
+    const msg =
+      error.code === "23505"
+        ? "Conflito de horário: o professor já está em outra turma neste mesmo horário."
+        : error.message
+    return { ok: false, count: 0, mensagem: `Erro ao salvar grade: ${msg}` }
+  }
+
+  const extra =
+    ignoradas > 0
+      ? ` (${ignoradas} aula(s) ignorada(s) por professor em duas turmas no mesmo horário)`
+      : ""
+
+  return {
+    ok: true,
+    count: semConflito.length,
+    mensagem: `Grade salva com ${semConflito.length} aula(s)! Cada professor em apenas uma turma por horário.${extra}`,
+  }
 }
 
 export async function persistRecreioIntercalado(

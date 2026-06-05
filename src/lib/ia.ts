@@ -14,9 +14,10 @@ export async function gerarGradeHorarios(
     content: `Você é um especialista em gestão escolar. Gere uma grade horária semanal COMPLETA e BALANCEADA para uma escola brasileira.
 
 REGRAS:
-- Cada turma deve ter aulas distribuídas de segunda a sexta (dias 0-4)
-- Não coloque o mesmo professor em duas turmas no mesmo horário/dia
-- Distribua as matérias de forma equilibrada
+- Gere para TODAS as turmas/salas listadas
+- Cada turma: aulas de segunda a sexta (dias 0-4) em todos os períodos tipo "aula"
+- NUNCA o mesmo professor em duas turmas no mesmo dia e período
+- NUNCA mais de 2 períodos de aula CONSECUTIVOS (ordem) para o mesmo professor no mesmo dia
 - Use os IDs exatos fornecidos nos dados
 
 RETORNE JSON:

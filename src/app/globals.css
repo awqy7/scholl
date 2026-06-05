@@ -235,6 +235,92 @@
     box-shadow: var(--aria-shadow), 0 0 0 1px rgba(34, 211, 238, 0.05);
   }
 
+  .grade-dias-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  .grade-dia-bloco {
+    border-radius: var(--aria-radius-lg);
+    border: 1px solid var(--aria-border-strong);
+    background: linear-gradient(
+      165deg,
+      rgba(14, 14, 22, 0.95) 0%,
+      rgba(10, 10, 16, 0.88) 100%
+    );
+    overflow: hidden;
+    box-shadow: 0 12px 40px -16px rgba(0, 0, 0, 0.55);
+    animation: aria-fade-up 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .grade-dia-cabecalho {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--aria-border);
+    background: linear-gradient(
+      90deg,
+      rgba(34, 211, 238, 0.1) 0%,
+      rgba(99, 102, 241, 0.06) 55%,
+      transparent 100%
+    );
+  }
+
+  .grade-dia-titulo {
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--aria-text);
+  }
+
+  .grade-dia-indice {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--aria-accent);
+    opacity: 0.9;
+  }
+
+  .grade-dia-corpo {
+    padding: 0.75rem 1rem 1rem;
+    overflow-x: auto;
+  }
+
+  .grade-dia-tabela {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.8125rem;
+  }
+
+  .grade-dia-tabela th,
+  .grade-dia-tabela td {
+    border-color: var(--aria-border);
+  }
+
+  .grade-celula-aula {
+    border-radius: 10px;
+    padding: 0.65rem 0.75rem;
+    min-height: 3.25rem;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .grade-celula-aula:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.5);
+  }
+
+  .grade-celula-vazia {
+    min-height: 3.25rem;
+    border-radius: 10px;
+    border: 1px dashed rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.02);
+  }
+
   .aria-fab {
     background: linear-gradient(135deg, #22d3ee 0%, #6366f1 100%);
     box-shadow:
