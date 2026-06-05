@@ -6,15 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Loader2, School, Settings, Copy, Check } from "lucide-react"
+import { Loader2, Baby, School, Brain } from "lucide-react"
+import type { TipoEscola } from "@/lib/escola-tipo"
 import { traduzirErroAuth } from "@/lib/auth-messages"
-import {
-  gerarEnvLocal,
-  isSupabaseReady,
-  salvarSupabaseLocal,
-  getSupabaseUrl,
-} from "@/lib/supabase/config"
+import { AriaLogo } from "@/components/layout/aria-logo"
 
 type Modo = "entrar" | "criar"
 
@@ -23,13 +18,9 @@ function LoginForm() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [nomeEscola, setNomeEscola] = useState("")
+  const [tipoEscola, setTipoEscola] = useState<TipoEscola>("creche")
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState<{ tipo: "erro" | "ok" | "info"; texto: string } | null>(null)
-  const [showConfig, setShowConfig] = useState(false)
-  const [sbUrl, setSbUrl] = useState("")
-  const [sbKey, setSbKey] = useState("")
-  const [copiado, setCopiado] = useState(false)
-  const [pronto, setPronto] = useState(false)
 
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -38,8 +29,6 @@ function LoginForm() {
     if (searchParams.get("error") === "auth_failed") {
       setMsg({ tipo: "erro", texto: "Falha na autenticação. Tente entrar novamente." })
     }
-    setPronto(isSupabaseReady())
-    if (!isSupabaseReady()) setShowConfig(true)
   }, [searchParams])
 
   function getClient() {
@@ -48,32 +37,10 @@ function LoginForm() {
     } catch (e) {
       setMsg({
         tipo: "erro",
-        texto: e instanceof Error ? e.message : "Configure o Supabase abaixo.",
+        texto: e instanceof Error ? e.message : "Erro ao conectar. Verifique as variáveis de ambiente.",
       })
-      setShowConfig(true)
       return null
     }
-  }
-
-  function salvarConfig() {
-    if (!sbUrl.trim() || !sbKey.trim()) {
-      setMsg({ tipo: "erro", texto: "Cole a URL e a chave anon do Supabase." })
-      return
-    }
-    salvarSupabaseLocal(sbUrl, sbKey)
-    setPronto(true)
-    setShowConfig(false)
-    setMsg({
-      tipo: "ok",
-      texto: "Conexão salva! Agora crie sua conta ou entre com email e senha.",
-    })
-  }
-
-  async function copiarEnv() {
-    const texto = gerarEnvLocal(sbUrl || getSupabaseUrl(), sbKey)
-    await navigator.clipboard.writeText(texto)
-    setCopiado(true)
-    setTimeout(() => setCopiado(false), 2000)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -104,7 +71,10 @@ function LoginForm() {
       email,
       password,
       options: {
-        data: { nome: nomeEscola.trim() || email.split("@")[0] },
+        data: {
+          nome: nomeEscola.trim() || email.split("@")[0],
+          tipo_escola: tipoEscola,
+        },
         emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     })
@@ -116,6 +86,14 @@ function LoginForm() {
     }
 
     if (data.session) {
+      await fetch("/api/escola", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nome: nomeEscola.trim() || email.split("@")[0],
+          tipo: tipoEscola,
+        }),
+      }).catch(() => {})
       setMsg({ tipo: "ok", texto: "Conta criada! Entrando..." })
       router.push("/dashboard")
       router.refresh()
@@ -133,146 +111,138 @@ function LoginForm() {
     setLoading(false)
   }
 
-  const msgClass =
+  const msgStyles =
     msg?.tipo === "erro"
-      ? "bg-red-50 text-red-700"
+      ? "bg-red-500/10 text-red-300 border-red-500/20"
       : msg?.tipo === "ok"
-        ? "bg-green-50 text-green-700"
-        : "bg-blue-50 text-blue-700"
+        ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
+        : "bg-cyan-500/10 text-cyan-200 border-cyan-500/20"
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="w-full max-w-md space-y-4">
-        <Card>
-          <CardHeader className="text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600">
-              <School className="h-6 w-6 text-white" />
-            </div>
-            <CardTitle className="text-2xl">Escola Inteligente</CardTitle>
-            <CardDescription>Entre ou crie sua conta para usar o sistema com IA</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex rounded-lg bg-gray-100 p-1">
-              <button
-                type="button"
-                className={`flex-1 rounded-md py-2 text-sm font-medium ${modo === "entrar" ? "bg-white shadow text-blue-700" : "text-gray-600"}`}
-                onClick={() => setModo("entrar")}
-              >
-                Entrar
-              </button>
-              <button
-                type="button"
-                className={`flex-1 rounded-md py-2 text-sm font-medium ${modo === "criar" ? "bg-white shadow text-blue-700" : "text-gray-600"}`}
-                onClick={() => setModo("criar")}
-              >
-                Criar conta
-              </button>
-            </div>
+    <div className="flex min-h-screen flex-col p-6">
+      <header className="mb-10">
+        <AriaLogo href="/" showName />
+      </header>
 
-            {!pronto && (
-              <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">
-                Primeiro configure o Supabase abaixo (só uma vez).
-              </p>
-            )}
+      <div className="flex flex-1 items-center justify-center">
+        <div className="glass-card w-full max-w-md p-8">
+          <p className="text-sm mb-6" style={{ color: "var(--aria-text-muted)" }}>
+            Gestão escolar inteligente — entre ou cadastre sua escola
+          </p>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {modo === "criar" && (
+          <div
+            className="flex rounded-[var(--aria-radius)] p-1 mb-6"
+            style={{ background: "var(--aria-surface-hover)" }}
+          >
+            {(["entrar", "criar"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                className={`flex-1 rounded-[10px] py-2 text-sm font-medium transition-all ${
+                  modo === m ? "text-[#050508]" : ""
+                }`}
+                style={
+                  modo === m
+                    ? { background: "var(--aria-accent)", color: "#050508" }
+                    : { color: "var(--aria-text-muted)" }
+                }
+                onClick={() => setModo(m)}
+              >
+                {m === "entrar" ? "Entrar" : "Criar conta"}
+              </button>
+            ))}
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {modo === "criar" && (
+              <>
+                <div className="space-y-2">
+                  <Label>Tipo de escola</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        { id: "creche" as const, icon: Baby, title: "Creche", sub: "Educação infantil" },
+                        { id: "normal" as const, icon: School, title: "Regular", sub: "Ensino fundamental" },
+                      ] as const
+                    ).map(({ id, icon: Icon, title, sub }) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setTipoEscola(id)}
+                        className="rounded-[var(--aria-radius)] border p-3 text-left transition-all"
+                        style={{
+                          borderColor:
+                            tipoEscola === id ? "rgba(34,211,238,0.45)" : "var(--aria-border)",
+                          background:
+                            tipoEscola === id ? "var(--aria-accent-soft)" : "transparent",
+                        }}
+                      >
+                        <Icon
+                          className="h-4 w-4 mb-1"
+                          style={{ color: tipoEscola === id ? "var(--aria-accent)" : undefined }}
+                        />
+                        <p className="text-sm font-medium">{title}</p>
+                        <p className="text-xs mt-0.5" style={{ color: "var(--aria-text-subtle)" }}>
+                          {sub}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="nome">Nome da escola</Label>
                   <Input
                     id="nome"
-                    placeholder="Ex: Creche Sol"
+                    placeholder={
+                      tipoEscola === "creche" ? "Ex: Creche Sol" : "Ex: Colégio Horizonte"
+                    }
                     value={nomeEscola}
                     onChange={(e) => setNomeEscola(e.target.value)}
                   />
                 </div>
+              </>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="seu@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Senha</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="Mínimo 6 caracteres"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+                autoComplete={modo === "entrar" ? "current-password" : "new-password"}
+              />
+            </div>
+
+            {msg && (
+              <div className={`rounded-lg border p-3 text-sm ${msgStyles}`}>{msg.texto}</div>
+            )}
+
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+              ) : modo === "entrar" ? (
+                "Entrar"
+              ) : (
+                "Criar conta e acessar"
               )}
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="seu@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Mínimo 6 caracteres"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  autoComplete={modo === "entrar" ? "current-password" : "new-password"}
-                />
-              </div>
-
-              {msg && <div className={`rounded-lg p-3 text-sm ${msgClass}`}>{msg.texto}</div>}
-
-              <Button type="submit" className="w-full" disabled={loading || !pronto}>
-                {loading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : modo === "entrar" ? "Entrar" : "Criar conta e acessar"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <button
-            type="button"
-            className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-gray-700"
-            onClick={() => setShowConfig(!showConfig)}
-          >
-            <span className="flex items-center gap-2">
-              <Settings className="h-4 w-4" />
-              Configurar conexão (Supabase)
-            </span>
-            <span className={pronto ? "text-green-600 text-xs" : "text-amber-600 text-xs"}>
-              {pronto ? "OK" : "Obrigatório"}
-            </span>
-          </button>
-          {showConfig && (
-            <CardContent className="space-y-3 border-t pt-3 text-sm">
-              <ol className="list-decimal list-inside space-y-1 text-gray-600 text-xs">
-                <li>
-                  Crie projeto em{" "}
-                  <a href="https://supabase.com" target="_blank" rel="noreferrer" className="text-blue-600 underline">
-                    supabase.com
-                  </a>
-                </li>
-                <li>
-                  SQL Editor → execute <code className="bg-gray-100 px-1">supabase/migrations/00001_schema.sql</code>
-                </li>
-                <li>Settings → API → copie URL e anon key</li>
-              </ol>
-              <div className="space-y-2">
-                <Label>URL do projeto</Label>
-                <Input placeholder="https://xxxxx.supabase.co" value={sbUrl} onChange={(e) => setSbUrl(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>Chave anon (public)</Label>
-                <Input placeholder="eyJ... ou sb_publishable_..." value={sbKey} onChange={(e) => setSbKey(e.target.value)} />
-              </div>
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" className="flex-1" onClick={salvarConfig}>
-                  Salvar e continuar
-                </Button>
-                <Button type="button" variant="ghost" size="sm" onClick={copiarEnv} title="Copiar .env.local">
-                  {copiado ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                </Button>
-              </div>
-              <p className="text-xs text-gray-500">
-                Para a IA funcionar, cole também em <code className="bg-gray-100 px-1">.env.local</code> e reinicie{" "}
-                <code className="bg-gray-100 px-1">npm run dev</code>.
-              </p>
-            </CardContent>
-          )}
-        </Card>
+            </Button>
+          </form>
+        </div>
       </div>
     </div>
   )
@@ -280,7 +250,14 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Carregando...</div>}>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center gap-2">
+          <Brain className="h-5 w-5" style={{ color: "var(--aria-accent)" }} />
+          <span style={{ color: "var(--aria-text-muted)" }}>ARIA</span>
+        </div>
+      }
+    >
       <LoginForm />
     </Suspense>
   )

@@ -5,6 +5,9 @@ export async function updateSession(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   const publicPaths = ["/login", "/auth/callback", "/api/auth"]
+  if (process.env.NODE_ENV === "development") {
+    publicPaths.push("/api/ia/ping")
+  }
   const isPublicPath = publicPaths.some((p) => request.nextUrl.pathname.startsWith(p))
 
   if (

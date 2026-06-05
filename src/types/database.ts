@@ -1,6 +1,9 @@
+export type TipoEscolaDb = "creche" | "normal"
+
 export interface Escola {
   id: string
   nome: string
+  tipo: TipoEscolaDb
   created_at: string
 }
 

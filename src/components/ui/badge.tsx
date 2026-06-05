@@ -4,15 +4,16 @@ interface BadgeProps {
   children: React.ReactNode
   variant?: "default" | "success" | "warning" | "danger" | "outline"
   className?: string
+  style?: React.CSSProperties
 }
 
-function Badge({ children, variant = "default", className }: BadgeProps) {
+function Badge({ children, variant = "default", className, style }: BadgeProps) {
   const variants: Record<string, string> = {
-    default: "bg-blue-100 text-blue-800",
-    success: "bg-green-100 text-green-800",
-    warning: "bg-yellow-100 text-yellow-800",
-    danger: "bg-red-100 text-red-800",
-    outline: "border border-gray-300 text-gray-700",
+    default: "bg-indigo-500/25 text-indigo-200 border border-indigo-500/30",
+    success: "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30",
+    warning: "bg-amber-500/20 text-amber-200 border border-amber-500/30",
+    danger: "bg-red-500/20 text-red-300 border border-red-500/30",
+    outline: "border border-indigo-400/40 text-indigo-200 bg-indigo-950/30",
   }
   return (
     <span
@@ -21,6 +22,7 @@ function Badge({ children, variant = "default", className }: BadgeProps) {
         variants[variant],
         className
       )}
+      style={style}
     >
       {children}
     </span>

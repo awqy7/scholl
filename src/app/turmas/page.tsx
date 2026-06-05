@@ -1,7 +1,6 @@
 "use client"
 
-import { Sidebar } from "@/components/layout/sidebar"
-import { AuthGuard } from "@/components/layout/auth-guard"
+import { AppShell } from "@/components/layout/app-shell"
 import { createClient } from "@/lib/supabase/client"
 import { useEffect, useState, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,14 +16,9 @@ import type { Turma, Serie } from "@/types/database"
 
 export default function TurmasPage() {
   return (
-    <AuthGuard>
-      <div className="flex">
-        <Sidebar />
-        <main className="ml-64 flex-1 p-8">
-          <TurmasContent />
-        </main>
-      </div>
-    </AuthGuard>
+    <AppShell>
+      <TurmasContent />
+    </AppShell>
   )
 }
 
@@ -122,7 +116,7 @@ function TurmasContent() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Turmas</h1>
+        <h1 className="text-2xl font-bold text-slate-100">Turmas</h1>
         <div className="flex gap-2">
           <Button variant="outline" onClick={carregar} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
@@ -179,7 +173,7 @@ function TurmasContent() {
               </div>
             </form>
 
-            <div className="mt-6 border-t pt-4">
+            <div className="mt-6 border-t border-indigo-500/20 pt-4">
               <Label className="mb-2 block">Adicionar nova série</Label>
               <div className="flex gap-2">
                 <Input value={novaSerie} onChange={(e) => setNovaSerie(e.target.value)} placeholder="Ex: Jardim 3" />

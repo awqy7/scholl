@@ -38,7 +38,7 @@ export function limparSupabaseLocal() {
 export function gerarEnvLocal(url: string, anonKey: string): string {
   return `NEXT_PUBLIC_SUPABASE_URL=${url.trim()}
 NEXT_PUBLIC_SUPABASE_ANON_KEY=${anonKey.trim()}
-IA_API_KEY=sua-chave-openrouter
-OPENROUTER_MODEL=openai/gpt-oss-120b:free
-NEXT_PUBLIC_IA_PROVIDER=openrouter`
+GROQ_API_KEY=gsk_sua-chave-groq
+GROQ_MODEL=llama-3.3-70b-versatile
+NEXT_PUBLIC_IA_PROVIDER=groq`
 }

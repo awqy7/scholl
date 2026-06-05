@@ -1,7 +1,7 @@
 "use client"
 
-import { Sidebar } from "@/components/layout/sidebar"
-import { AuthGuard } from "@/components/layout/auth-guard"
+import { AppShell } from "@/components/layout/app-shell"
+import { CrecheOnly } from "@/components/layout/creche-only"
 import { createClient } from "@/lib/supabase/client"
 import { useEffect, useState, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,14 +17,11 @@ import type { RecreioIntercalado, Turma } from "@/types/database"
 
 export default function RecreioPage() {
   return (
-    <AuthGuard>
-      <div className="flex">
-        <Sidebar />
-        <main className="ml-64 flex-1 p-8">
-          <RecreioContent />
-        </main>
-      </div>
-    </AuthGuard>
+    <AppShell>
+      <CrecheOnly>
+        <RecreioContent />
+      </CrecheOnly>
+    </AppShell>
   )
 }
 
@@ -136,9 +133,9 @@ function RecreioContent() {
                   {recDia
                     .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio))
                     .map((r) => (
-                      <div key={r.id} className="rounded-lg bg-green-50 p-2 text-xs">
-                        <div className="font-medium">{r.turma?.nome}</div>
-                        <div className="text-green-700">{r.hora_inicio} - {r.hora_fim}</div>
+                      <div key={r.id} className="rounded-lg bg-emerald-500/15 border border-emerald-500/25 p-2 text-xs">
+                        <div className="font-medium text-emerald-100">{r.turma?.nome}</div>
+                        <div className="text-emerald-300/80">{r.hora_inicio} - {r.hora_fim}</div>
                       </div>
                     ))}
                 </div>
@@ -180,9 +177,9 @@ function RecreioAgora({ recreios }: { recreios: RecreioIntercalado[] }) {
   return (
     <div className="space-y-3">
       {recreioAtual ? (
-        <div className="rounded-lg bg-green-100 p-4 text-center">
-          <p className="text-lg font-bold text-green-800">{recreioAtual.turma?.nome}</p>
-          <p className="text-sm text-green-600">No recreio agora! ({recreioAtual.hora_inicio} - {recreioAtual.hora_fim})</p>
+        <div className="rounded-lg bg-emerald-500/20 border border-emerald-500/30 p-4 text-center">
+          <p className="text-lg font-bold text-emerald-200">{recreioAtual.turma?.nome}</p>
+          <p className="text-sm text-emerald-300/90">No recreio agora! ({recreioAtual.hora_inicio} - {recreioAtual.hora_fim})</p>
         </div>
       ) : (
         <p className="text-gray-500 text-center py-4">Nenhuma turma no recreio agora</p>

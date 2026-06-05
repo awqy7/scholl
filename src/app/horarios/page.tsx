@@ -1,7 +1,6 @@
 "use client"
 
-import { Sidebar } from "@/components/layout/sidebar"
-import { AuthGuard } from "@/components/layout/auth-guard"
+import { AppShell } from "@/components/layout/app-shell"
 import { createClient } from "@/lib/supabase/client"
 import { useEffect, useState, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -16,14 +15,9 @@ import type { Periodo } from "@/types/database"
 
 export default function HorariosPage() {
   return (
-    <AuthGuard>
-      <div className="flex">
-        <Sidebar />
-        <main className="ml-64 flex-1 p-8">
-          <HorariosContent />
-        </main>
-      </div>
-    </AuthGuard>
+    <AppShell>
+      <HorariosContent />
+    </AppShell>
   )
 }
 

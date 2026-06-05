@@ -4,29 +4,99 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import {
-  LayoutDashboard, Calendar, Users, BookOpen, Clock,
-  TreePine, UserX, RefreshCw, ClipboardList, LogOut,
+  LayoutDashboard,
+  Calendar,
+  Users,
+  BookOpen,
+  Clock,
+  TreePine,
+  UserX,
+  RefreshCw,
+  ClipboardList,
+  LogOut,
+  GraduationCap,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
+import { useEscola } from "@/lib/escola-context"
+import { escolaTemRecreioIntercalado } from "@/lib/escola-tipo"
+import { AriaLogo } from "@/components/layout/aria-logo"
 
-const menuItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/turmas", label: "Turmas", icon: Users },
-  { href: "/professores", label: "Professores", icon: BookOpen },
-  { href: "/materias", label: "Matérias", icon: BookOpen },
-  { href: "/horarios", label: "Períodos", icon: Clock },
-  { href: "/grade", label: "Grade Horária", icon: Calendar },
-  { href: "/recreio", label: "Recreio", icon: TreePine },
-  { href: "/faltas", label: "Faltas", icon: UserX },
-  { href: "/substituicoes", label: "Substituições", icon: RefreshCw },
-  { href: "/planejamento", label: "Planejamento", icon: ClipboardList },
+type MenuItem = {
+  href: string
+  label: string
+  labelCreche?: string
+  icon: typeof LayoutDashboard
+  group: "main" | "cadastros" | "operacional"
+  onlyCreche?: boolean
+}
+
+const menuItems: MenuItem[] = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, group: "main" },
+  {
+    href: "/turmas",
+    label: "Turmas",
+    labelCreche: "Salas",
+    icon: Users,
+    group: "cadastros",
+  },
+  { href: "/professores", label: "Professores", icon: BookOpen, group: "cadastros" },
+  { href: "/materias", label: "Matérias", icon: GraduationCap, group: "cadastros" },
+  { href: "/horarios", label: "Períodos", icon: Clock, group: "cadastros" },
+  { href: "/grade", label: "Grade", icon: Calendar, group: "operacional" },
+  {
+    href: "/recreio",
+    label: "Recreio",
+    icon: TreePine,
+    group: "operacional",
+    onlyCreche: true,
+  },
+  { href: "/faltas", label: "Faltas", icon: UserX, group: "operacional" },
+  { href: "/substituicoes", label: "Substituições", icon: RefreshCw, group: "operacional" },
+  { href: "/planejamento", label: "Planejamento", icon: ClipboardList, group: "operacional" },
 ]
+
+const groups: { key: MenuItem["group"]; label: string }[] = [
+  { key: "main", label: "Visão" },
+  { key: "cadastros", label: "Cadastros" },
+  { key: "operacional", label: "Operação" },
+]
+
+function NavLink({
+  item,
+  label,
+  active,
+}: {
+  item: MenuItem
+  label: string
+  active: boolean
+}) {
+  const Icon = item.icon
+  return (
+    <Link
+      href={item.href}
+      className="aria-nav-item"
+      data-active={active}
+      title={label}
+    >
+      <Icon className="h-4 w-4 shrink-0 opacity-80" strokeWidth={1.75} />
+      <span>{label}</span>
+    </Link>
+  )
+}
 
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
+  const { tipo, config } = useEscola()
+  const temRecreio = escolaTemRecreioIntercalado(tipo)
+  const itensVisiveis = menuItems.filter((item) => !item.onlyCreche || temRecreio)
+
+  function rotulo(item: MenuItem) {
+    if (tipo === "creche" && item.labelCreche) return item.labelCreche
+    return item.label
+  }
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -34,43 +104,57 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r border-gray-200 bg-white">
-      <div className="flex h-16 items-center gap-2 border-b border-gray-200 px-6">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white font-bold text-sm">
-          EI
-        </div>
-        <span className="font-semibold text-lg">Escola IA</span>
+    <aside className="aria-sidebar">
+      <div
+        className="shrink-0 px-4 py-5 border-b"
+        style={{ borderColor: "var(--aria-border)" }}
+      >
+        <AriaLogo href="/dashboard" />
+        <p
+          className="mt-2 ml-[2.85rem] text-[10px] font-medium tracking-wide truncate"
+          style={{ color: "var(--aria-text-subtle)" }}
+        >
+          {config.label}
+        </p>
       </div>
 
-      <nav className="flex flex-col gap-1 p-4">
-        {menuItems.map((item) => {
-          const Icon = item.icon
-          const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
+        {groups.map((group) => {
+          const items = itensVisiveis.filter((i) => i.group === group.key)
+          if (!items.length) return null
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {item.label}
-            </Link>
+            <div key={group.key}>
+              <p className="aria-nav-label">{group.label}</p>
+              <div className="flex flex-col gap-0.5">
+                {items.map((item) => {
+                  const active =
+                    pathname === item.href || pathname.startsWith(item.href + "/")
+                  return (
+                    <NavLink
+                      key={item.href}
+                      item={item}
+                      label={rotulo(item)}
+                      active={active}
+                    />
+                  )
+                })}
+              </div>
+            </div>
           )
         })}
       </nav>
 
-      <div className="absolute bottom-4 left-4 right-4">
+      <div className="shrink-0 p-3 border-t" style={{ borderColor: "var(--aria-border)" }}>
         <button
+          type="button"
           onClick={handleLogout}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors cursor-pointer"
+          className={cn(
+            "aria-nav-item w-full text-left",
+            "hover:!text-red-300 hover:!bg-red-500/10"
+          )}
         >
-          <LogOut className="h-4 w-4" />
-          Sair
+          <LogOut className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+          <span>Sair</span>
         </button>
       </div>
     </aside>

@@ -1,7 +1,6 @@
 "use client"
 
-import { Sidebar } from "@/components/layout/sidebar"
-import { AuthGuard } from "@/components/layout/auth-guard"
+import { AppShell } from "@/components/layout/app-shell"
 import { createClient } from "@/lib/supabase/client"
 import { useEffect, useState, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -16,14 +15,9 @@ import type { PlanejamentoSemanal, Turma, Materia, Professor } from "@/types/dat
 
 export default function PlanejamentoPage() {
   return (
-    <AuthGuard>
-      <div className="flex">
-        <Sidebar />
-        <main className="ml-64 flex-1 p-8">
-          <PlanejamentoContent />
-        </main>
-      </div>
-    </AuthGuard>
+    <AppShell>
+      <PlanejamentoContent />
+    </AppShell>
   )
 }
 
@@ -140,7 +134,7 @@ function PlanejamentoContent() {
               <div className="space-y-2">
                 <Label>Conteúdo</Label>
                 <textarea
-                  className="flex h-20 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="field-base flex h-20 resize-y"
                   value={form.conteudo}
                   onChange={(e) => setForm({ ...form, conteudo: e.target.value })}
                   placeholder="Descreva o conteúdo da semana"
@@ -150,7 +144,7 @@ function PlanejamentoContent() {
               <div className="space-y-2">
                 <Label>Objetivos</Label>
                 <textarea
-                  className="flex h-20 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="field-base flex h-20 resize-y"
                   value={form.objetivos}
                   onChange={(e) => setForm({ ...form, objetivos: e.target.value })}
                   placeholder="Objetivos de aprendizagem"

@@ -1,74 +1,157 @@
 import { NextResponse } from "next/server"
-import { chamarIA } from "@/lib/ia-client"
-import { parseIaJsonContent } from "@/lib/ia-utils"
+import { formatIaError } from "@/lib/ia-utils"
+import { getProvedorAtivo } from "@/lib/ia-client"
 import { requireApiUser } from "@/lib/api-auth"
 import {
-  buildSystemPrompt,
-  parseComandoSimples,
   isAcaoValida,
+  normalizarAcaoComando,
+  normalizarParamsComando,
+  type AcaoComando,
   type DecisaoComando,
 } from "@/lib/ia-comando"
+import {
+  interpretarComandoAria,
+  conversarComDiretor,
+  deveExecutarAcao,
+} from "@/lib/aria-orquestrador"
+import { adicionarFatoMemoria, carregarMemoria } from "@/lib/aria-memoria"
+import { normalizarTipoEscola } from "@/lib/escola-tipo"
+
+export const maxDuration = 90
 
 export async function POST(request: Request) {
   const auth = await requireApiUser()
   if ("response" in auth) return auth.response
 
   try {
-    const { comando } = await request.json()
+    const body = await request.json()
+    const { comando, contexto, historico } = body
+
     if (!comando || typeof comando !== "string") {
       return NextResponse.json({ error: "Comando vazio" }, { status: 400 })
     }
 
-    let decisao: DecisaoComando | null = null
-
-    const modelosFallback = [
-      process.env.OPENROUTER_MODEL || "openai/gpt-oss-120b:free",
-      "openrouter/free",
-      "mistralai/mistral-nemo",
-    ]
-
-    for (const modelo of modelosFallback) {
-      try {
-        const content = await chamarIA(
-          [
-            { role: "system", content: buildSystemPrompt() },
-            { role: "user", content: comando },
-          ],
-          { temperature: 0.1 },
-          modelo
-        )
-
-        const parsed = parseIaJsonContent(content) as { acao?: string; params?: Record<string, unknown> }
-        if (parsed?.acao && isAcaoValida(parsed.acao)) {
-          decisao = { acao: parsed.acao, params: parsed.params || {} }
-          break
-        }
-      } catch {
-        decisao = null
-      }
+    let memoria = { resumo: "", fatos: [] as { texto: string; ts: string; acao?: string }[] }
+    try {
+      memoria = await carregarMemoria(auth.supabase, auth.escolaId)
+    } catch {
+      // tabela aria_contexto pode não existir ainda — segue sem memória
     }
 
-    if (!decisao) {
-      const fallback = parseComandoSimples(comando)
-      if (fallback) decisao = fallback
+    const { data: escolaRow } = await auth.supabase
+      .from("escolas")
+      .select("tipo, nome")
+      .eq("id", auth.escolaId)
+      .maybeSingle()
+
+    const tipoEscola = normalizarTipoEscola(
+      escolaRow?.tipo || (auth.user.user_metadata?.tipo_escola as string)
+    )
+
+    const contextoCompleto = {
+      ...(typeof contexto === "object" && contexto ? contexto : {}),
+      tipoEscola,
+      escolaNome: escolaRow?.nome,
     }
 
-    if (!decisao) {
+    const parsed = await interpretarComandoAria({
+      comando,
+      contexto: contextoCompleto,
+      historico,
+      memoria,
+    })
+
+    const acaoCanon = normalizarAcaoComando(parsed?.acao) || parsed?.acao
+
+    if (!acaoCanon || !isAcaoValida(acaoCanon)) {
+      const resposta = await conversarComDiretor({
+        pergunta: comando,
+        contextoEscola: contextoCompleto,
+        historico,
+        memoria,
+      })
       return NextResponse.json({
-        resposta:
-          'Não entendi. Exemplos: "crie turma Maternal C", "Maria Silva faltou", "gere a grade", "liste professores", "organize o recreio".',
-        acao: "desconhecido",
+        acao: "responder_pergunta",
+        params: { pergunta: comando, resposta },
+        sucesso: true,
+        resposta,
+        modo: "ia",
+        provedor: getProvedorAtivo(),
       })
     }
+
+    if (
+      acaoCanon === "responder_pergunta" ||
+      !deveExecutarAcao(comando, acaoCanon)
+    ) {
+      const pergunta = String(
+        parsed.params?.pergunta || parsed.params?.texto || comando
+      )
+      const resposta = await conversarComDiretor({
+        pergunta,
+        contextoEscola: contextoCompleto,
+        historico,
+        memoria,
+      })
+      return NextResponse.json({
+        acao: "responder_pergunta",
+        params: { pergunta, resposta },
+        sucesso: true,
+        resposta,
+        confianca: parsed.confianca,
+        explicacao: parsed.explicacao,
+        modo: "ia",
+        provedor: getProvedorAtivo(),
+      })
+    }
+
+    const params = normalizarParamsComando(
+      acaoCanon,
+      parsed.params || {},
+      comando
+    )
+
+    const decisao: DecisaoComando = {
+      acao: acaoCanon as AcaoComando,
+      params,
+      confianca: parsed.confianca,
+      explicacao: parsed.explicacao,
+    }
+
+    try {
+      await adicionarFatoMemoria(
+        auth.supabase,
+        auth.escolaId,
+        `Pedido: ${comando.slice(0, 200)} → ${decisao.acao}`,
+        decisao.acao
+      )
+    } catch {
+      // memória opcional — não bloqueia o comando
+    }
+
+    const acaoLabel = String(decisao.acao)
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (l) => l.toUpperCase())
 
     return NextResponse.json({
       acao: decisao.acao,
       params: decisao.params,
       sucesso: true,
-      mensagem: `Entendi! Vou ${String(decisao.acao).replace(/_/g, " ")}.`,
+      confianca: decisao.confianca,
+      explicacao: decisao.explicacao,
+      mensagem: `Executando: ${acaoLabel}...`,
+      modo: "ia",
+      provedor: getProvedorAtivo(),
+      tipoEscola,
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Erro"
-    return NextResponse.json({ resposta: `Erro: ${message}`, acao: "erro" }, { status: 500 })
+    return NextResponse.json(
+      {
+        resposta: formatIaError(err),
+        acao: "erro",
+        sucesso: false,
+      },
+      { status: 502 }
+    )
   }
 }

@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/client"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { Brain } from "lucide-react"
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
@@ -21,8 +22,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      <div className="flex h-screen flex-col items-center justify-center gap-4">
+        <div className="aria-brand-icon animate-pulse">
+          <Brain className="h-5 w-5" strokeWidth={2} />
+        </div>
+        <p className="text-sm font-medium tracking-wide" style={{ color: "var(--aria-text-muted)" }}>
+          ARIA
+        </p>
       </div>
     )
   }

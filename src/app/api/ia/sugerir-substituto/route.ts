@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
-import { chamarIAJson } from "@/lib/ia-client"
+import { sugerirSubstituto } from "@/lib/ia"
+import { formatIaError } from "@/lib/ia-utils"
 import { requireApiUser } from "@/lib/api-auth"
+
+export const maxDuration = 60
 
 export async function POST(request: Request) {
   const auth = await requireApiUser()
@@ -10,21 +13,19 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { professorAusente, professoresDisponiveis, materia, horario } = body
 
-    const result = await chamarIAJson([
-      {
-        role: "system",
-        content: `Você é coordenador escolar. Escolha o melhor substituto.
-Retorne JSON: { "substituto": "nome completo exato da lista", "justificativa": "texto curto" }`,
-      },
-      {
-        role: "user",
-        content: JSON.stringify({ professorAusente, professoresDisponiveis, materia, horario }),
-      },
-    ])
+    if (!professorAusente) {
+      return NextResponse.json({ error: "Professor ausente não informado." }, { status: 400 })
+    }
 
-    return NextResponse.json(result)
+    const resultado = await sugerirSubstituto(
+      professorAusente,
+      professoresDisponiveis || [],
+      materia || "",
+      horario
+    )
+
+    return NextResponse.json({ ...((resultado as object) || {}), modo: "ia" })
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Erro"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: formatIaError(err) }, { status: 502 })
   }
 }

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
-import { chamarIAArray } from "@/lib/ia-client"
+import { gerarGradeHorarios } from "@/lib/ia"
+import { formatIaError } from "@/lib/ia-utils"
 import { requireApiUser } from "@/lib/api-auth"
+
+export const maxDuration = 90
 
 export async function POST(request: Request) {
   const auth = await requireApiUser()
@@ -10,26 +13,30 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { turmas, materias, professores, periodos, gradeAtual } = body
 
-    const aulas = await chamarIAArray(
-      [
-        {
-          role: "system",
-          content: `Você cria grade horária escolar semanal (seg-sex, dia_semana 0-4).
-Regras: sem conflito de professor no mesmo horário; respeitar carga horária; especialidades compatíveis.
-Retorne JSON: { "aulas": [ { "turma_id", "materia_id", "professor_id", "dia_semana", "periodo_id" } ] }
-Use APENAS ids fornecidos nos dados.`,
-        },
-        {
-          role: "user",
-          content: JSON.stringify({ turmas, materias, professores, periodos, gradeAtual }),
-        },
-      ],
-      ["aulas", "grade", "horarios", "items"]
+    if (!turmas?.length || !materias?.length || !professores?.length || !periodos?.length) {
+      return NextResponse.json(
+        { error: "Dados insuficientes para gerar a grade." },
+        { status: 400 }
+      )
+    }
+
+    const aulas = await gerarGradeHorarios(
+      turmas,
+      materias,
+      professores,
+      periodos,
+      gradeAtual || []
     )
 
-    return NextResponse.json(aulas)
+    if (!aulas.length) {
+      return NextResponse.json(
+        { error: "A IA não retornou aulas válidas. Tente o comando novamente." },
+        { status: 422 }
+      )
+    }
+
+    return NextResponse.json({ aulas, modo: "ia" })
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Erro"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: formatIaError(err) }, { status: 502 })
   }
 }

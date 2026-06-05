@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
-import { chamarIAArray } from "@/lib/ia-client"
+import { gerarRecreioIntercalado } from "@/lib/ia"
+import { formatIaError } from "@/lib/ia-utils"
 import { requireApiUser } from "@/lib/api-auth"
+
+export const maxDuration = 60
 
 export async function POST(request: Request) {
   const auth = await requireApiUser()
@@ -10,25 +13,25 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { turmas, espacosDisponiveis, duracao } = body
 
-    const horarios = await chamarIAArray(
-      [
-        {
-          role: "system",
-          content: `Você organiza recreios intercalados para creche.
-Regras: APENAS UMA turma por vez; respeitar período manha/tarde; intervalo mínimo 10min.
-Retorne JSON: { "horarios": [ { "turma_nome", "dia_semana": 0-4, "hora_inicio": "HH:MM", "hora_fim": "HH:MM" } ] }`,
-        },
-        {
-          role: "user",
-          content: JSON.stringify({ turmas, espacosDisponiveis, duracao }),
-        },
-      ],
-      ["horarios", "recreios", "items"]
+    if (!turmas?.length) {
+      return NextResponse.json({ error: "Nenhuma turma informada." }, { status: 400 })
+    }
+
+    const horarios = await gerarRecreioIntercalado(
+      turmas,
+      espacosDisponiveis ?? 2,
+      duracao ?? 20
     )
 
-    return NextResponse.json(horarios)
+    if (!horarios.length) {
+      return NextResponse.json(
+        { error: "A IA não retornou horários de recreio válidos." },
+        { status: 422 }
+      )
+    }
+
+    return NextResponse.json({ horarios, modo: "ia" })
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Erro"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: formatIaError(err) }, { status: 502 })
   }
 }

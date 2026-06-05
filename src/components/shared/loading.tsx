@@ -3,8 +3,12 @@ import { Loader2 } from "lucide-react"
 
 export function Loading({ className }: { className?: string }) {
   return (
-    <div className={cn("flex items-center justify-center py-12", className)}>
-      <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+    <div className={cn("flex items-center justify-center py-16", className)}>
+      <Loader2
+        className="h-7 w-7 animate-spin"
+        style={{ color: "var(--aria-accent)" }}
+        strokeWidth={1.75}
+      />
     </div>
   )
 }
@@ -19,10 +23,20 @@ export function EmptyState({
   description?: string
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      {icon && <div className="mb-4 text-gray-400">{icon}</div>}
-      <h3 className="text-lg font-medium text-gray-900">{title}</h3>
-      {description && <p className="mt-1 text-sm text-gray-500">{description}</p>}
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      {icon && (
+        <div className="mb-4 opacity-40" style={{ color: "var(--aria-accent)" }}>
+          {icon}
+        </div>
+      )}
+      <h3 className="text-base font-medium" style={{ color: "var(--aria-text)" }}>
+        {title}
+      </h3>
+      {description && (
+        <p className="mt-1.5 text-sm max-w-sm" style={{ color: "var(--aria-text-muted)" }}>
+          {description}
+        </p>
+      )}
     </div>
   )
 }

@@ -1,12 +1,14 @@
 {
-  "name": "escola-inteligente",
+  "name": "aria",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:ia": "node scripts/test-ia.mjs",
+    "test:groq": "node scripts/test-groq-chat.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",

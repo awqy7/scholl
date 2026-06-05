@@ -2,29 +2,27 @@ import { cn } from "@/lib/utils"
 import type { HTMLAttributes } from "react"
 
 function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("glass-card text-[var(--aria-text)]", className)} {...props} />
+}
+
+function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("flex flex-col space-y-1 p-6 pb-4", className)} {...props} />
+}
+
+function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
   return (
-    <div
-      className={cn(
-        "rounded-xl border border-gray-200 bg-white shadow-sm",
-        className
-      )}
+    <h3
+      className={cn("font-semibold text-base tracking-tight", className)}
+      style={{ color: "var(--aria-text)" }}
       {...props}
     />
   )
 }
 
-function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("flex flex-col space-y-1.5 p-6", className)} {...props} />
-}
-
-function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
-  return (
-    <h3 className={cn("font-semibold text-lg leading-none tracking-tight", className)} {...props} />
-  )
-}
-
 function CardDescription({ className, ...props }: HTMLAttributes<HTMLParagraphElement>) {
-  return <p className={cn("text-sm text-gray-500", className)} {...props} />
+  return (
+    <p className={cn("text-sm", className)} style={{ color: "var(--aria-text-muted)" }} {...props} />
+  )
 }
 
 function CardContent({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
