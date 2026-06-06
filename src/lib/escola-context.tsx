@@ -41,10 +41,20 @@ export function EscolaProvider({ children }: { children: ReactNode }) {
       return
     }
 
+    // New proper way: resolve via membership (supports multiple schools per user in future)
+    const { data: membro } = await supabase
+      .from("escola_membros")
+      .select("escola_id")
+      .eq("user_id", user.id)
+      .limit(1)
+      .maybeSingle()
+
+    const resolvedEscolaId = membro?.escola_id || user.id // legacy fallback
+
     const { data } = await supabase
       .from("escolas")
       .select("nome, tipo")
-      .eq("id", user.id)
+      .eq("id", resolvedEscolaId)
       .maybeSingle()
 
     if (data) {

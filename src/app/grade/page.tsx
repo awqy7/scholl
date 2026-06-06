@@ -24,6 +24,7 @@ import { filtrarAulasSemConflitoHorario } from "@/lib/grade-gerador"
 import { useEscola } from "@/lib/escola-context"
 import { GradeVertical } from "@/components/grade/grade-vertical"
 import { Calendar, Sparkles, Trash2, CheckCircle2, AlertTriangle, Sun, Sunset, Clock } from "lucide-react"
+import { useToast } from "@/components/shared/toast"
 import type { GradeHorario, Turma, Materia, Professor, Periodo } from "@/types/database"
 
 export default function GradePage() {
@@ -43,6 +44,7 @@ function iconeTurno(turno: TurnoTurma) {
 function GradeContent() {
   const supabase = createClient()
   const { config } = useEscola()
+  const { showToast } = useToast()
   const rotuloSalas = config.recursos.rotuloTurmas
   const [turmas, setTurmas] = useState<Turma[]>([])
   const [materias, setMaterias] = useState<Materia[]>([])
@@ -81,7 +83,9 @@ function GradeContent() {
   const carregar = useCallback(async () => {
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) return
-    const eId = userData.user.id
+
+    const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
+    const eId = await getCurrentEscolaId(userData.user.id)
 
     try {
       await fetch("/api/grade/preparar", { method: "POST" })
@@ -176,21 +180,23 @@ function GradeContent() {
         Array.isArray(payload.avisos) && payload.avisos.length
           ? `\n\nAvisos: ${payload.avisos.join(" ")}`
           : ""
-      alert((payload.mensagem || "Grade salva!") + extra + avisos)
+      showToast((payload.mensagem || "Grade salva!") + extra + avisos, "success")
       await carregar()
       const temTarde = turmas.some((t) => normalizarTurnoTurma(t.periodo) === "tarde")
       if (temTarde) setTurnoAtivo("tarde")
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Erro ao gerar grade.")
+      showToast(err instanceof Error ? err.message : "Erro ao gerar grade.", "error")
     }
     setGerando(false)
   }
 
   async function handleRemover() {
-    if (!confirm("Limpar a grade de todas as salas e turnos?")) return
+    if (!window.confirm("Limpar a grade de todas as salas e turnos?")) return
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) return
-    await supabase.from("grade_horarios").delete().eq("escola_id", userData.user.id)
+    const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
+    const eId = await getCurrentEscolaId(userData.user.id)
+    await supabase.from("grade_horarios").delete().eq("escola_id", eId)
     carregar()
   }
 

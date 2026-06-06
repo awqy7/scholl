@@ -10,7 +10,8 @@ import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Loading, EmptyState } from "@/components/shared/loading"
 import { DIAS_SEMANA } from "@/lib/utils"
-import { ClipboardList, Plus } from "lucide-react"
+import { ClipboardList, Plus, Brain } from "lucide-react"
+import { useToast } from "@/components/shared/toast"
 import type { PlanejamentoSemanal, Turma, Materia, Professor } from "@/types/database"
 
 export default function PlanejamentoPage() {
@@ -23,6 +24,7 @@ export default function PlanejamentoPage() {
 
 function PlanejamentoContent() {
   const supabase = createClient()
+  const { showToast } = useToast()
   const [planejamentos, setPlanejamentos] = useState<PlanejamentoSemanal[]>([])
   const [turmas, setTurmas] = useState<Turma[]>([])
   const [materias, setMaterias] = useState<Materia[]>([])
@@ -38,7 +40,8 @@ function PlanejamentoContent() {
   const carregar = useCallback(async () => {
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) return
-    const eId = userData.user.id
+    const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
+    const eId = await getCurrentEscolaId(userData.user.id)
 
     const [pRes, tRes, mRes, prRes] = await Promise.all([
       supabase.from("planejamento_semanal").select("*, turma:turmas(*), materia:materias(*), professor:professores(*)").eq("escola_id", eId).order("semana_inicio", { ascending: false }),
@@ -60,17 +63,26 @@ function PlanejamentoContent() {
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) return
 
+    const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
+    const eId = await getCurrentEscolaId(userData.user.id)
+
     const hoje = new Date()
     const diaSemana = hoje.getDay()
     const diff = hoje.getDate() - diaSemana + (diaSemana === 0 ? -6 : 1)
     const segunda = new Date(hoje.setDate(diff))
 
-    await supabase.from("planejamento_semanal").insert({
-      escola_id: userData.user.id,
+    const { error } = await supabase.from("planejamento_semanal").insert({
+      escola_id: eId,
       semana_inicio: segunda.toISOString().split("T")[0],
       ...form,
     })
+    if (error) {
+      showToast("Erro ao salvar planejamento", "error")
+      return
+    }
+    showToast("Planejamento salvo!", "success")
     setShowForm(false)
+    setForm({ turma_id: "", materia_id: "", professor_id: "", conteudo: "", objetivos: "" })
     carregar()
   }
 
@@ -88,9 +100,18 @@ function PlanejamentoContent() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Planejamento Semanal</h1>
-        <Button onClick={() => setShowForm(!showForm)}>
-          <Plus className="h-4 w-4 mr-2" /> Novo Planejamento
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => window.dispatchEvent(new CustomEvent("aria:abrir-chat"))}
+            title="Peça à ARIA para analisar o planejamento e sugerir melhorias"
+          >
+            <Brain className="h-4 w-4 mr-2" /> Analisar com ARIA
+          </Button>
+          <Button onClick={() => setShowForm(!showForm)}>
+            <Plus className="h-4 w-4 mr-2" /> Novo Planejamento
+          </Button>
+        </div>
       </div>
 
       <div className="flex gap-4 items-center">
@@ -166,11 +187,11 @@ function PlanejamentoContent() {
           ) : (
             <div className="divide-y">
               {planosFiltrados.map((p) => (
-                <div key={p.id} className="p-4 hover:bg-gray-50">
+                <div key={p.id} className="p-4 hover:bg-[var(--aria-surface-hover)]" style={{ background: "var(--aria-surface)" }}>
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-medium">{materiasMap.get(p.materia_id)}</p>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm" style={{ color: "var(--aria-text-muted)" }}>
                         {turmasMap.get(p.turma_id)} - {professoresMap.get(p.professor_id)}
                       </p>
                     </div>

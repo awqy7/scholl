@@ -1,37 +1,41 @@
 import { getConfigTipo, normalizarTipoEscola } from "@/lib/escola-tipo"
 
+// Apenas ações de análise e sugestão (modo advisor).
+// As ações antigas de mutação (criar/editar/deletar/gerar) ainda existem em rotas legadas,
+// mas o chat NÃO deve mais anunciá-las nem executá-las.
 export const FERRAMENTAS = [
-  // Turmas
+  // Advisor (current focus for chat and practicality)
+  "analisar_escola",
+  "sugerir_melhorias",
+  "relatorio_professor",
+  "prever_faltas",
+  "responder_pergunta",
+  "status_sistema",
+  "listar_professores",
+  "listar_turmas",
+  "listar_materias",
+  "listar_periodos",
+  "listar_series",
+  "listar_disponiveis",
+  "professores_por_especialidade",
+  "resumo_semanal",
+
+  // Legacy (for API compatibility and manual grade/recreio features - chat guard + prompt prevent use)
   "criar_turma", "editar_turma", "deletar_turma", "listar_turmas", "turmas_sem_professor",
-  // Professores
   "criar_professor", "editar_professor", "deletar_professor", "listar_professores",
   "detalhes_professor", "alterar_status_professor", "listar_disponiveis", "professores_por_especialidade",
-  // Matérias
   "criar_materia", "editar_materia", "deletar_materia", "listar_materias",
-  // Séries
   "criar_serie", "editar_serie", "deletar_serie", "listar_series",
-  // Períodos
   "criar_periodo", "editar_periodo", "deletar_periodo", "listar_periodos",
-  // Faltas
   "registrar_falta", "deletar_falta", "justificar_falta", "listar_faltas",
   "faltas_do_professor", "professor_mais_faltas",
-  // Substituições
   "listar_substituicoes", "sugerir_substituto", "confirmar_substituicao",
   "recusar_substituicao", "cancelar_substituicao",
-  // Planejamento
   "criar_planejamento", "editar_planejamento", "deletar_planejamento", "listar_planejamentos",
-  // Grade & setup autônomo
   "gerar_grade", "montar_escola_completa", "gerar_tudo", "limpar_grade", "listar_grade_turma", "verificar_conflitos",
   "adicionar_aula", "remover_aula",
-  // Recreio
   "gerar_recreio",
-  // Eventos & Stats
   "listar_eventos", "resumo_semanal", "status_sistema",
-  // IA Analítica (novos)
-  "analisar_escola", "sugerir_melhorias", "relatorio_professor",
-  "otimizar_grade", "prever_faltas",
-  // Conversação natural
-  "responder_pergunta",
 ] as const
 
 export type AcaoComando = (typeof FERRAMENTAS)[number]
@@ -66,57 +70,38 @@ export function buildSystemPrompt(contexto?: {
       ? "\n- PROIBIDO nesta escola: gerar_recreio (recreio intercalado é só para creche)."
       : ""
 
-  return `Você é ARIA (Assistente de Roteamento Inteligente de Ações), o sistema de gestão escolar brasileiro.
-O diretor acabou de cadastrar a escola e fala naturalmente — você INTERPRETA e EXECUTA tudo no banco (cadastros em lote, grade, faltas).
-Todo pedido vira UMA ação com params completos; nunca diga "vá em Turmas" ou "cadastre manualmente".${ctx}
+  return `Você é ARIA, a assistente inteligente de gestão escolar.
+O diretor fala naturalmente. Seu papel atual é **somente advisor**:
+- Dar análises, relatórios, previsões e sugestões de melhoria.
+- NUNCA sugerir, propor ou tentar executar cadastros, edições, exclusões, geração automática de grade, recreio ou qualquer mutação no banco.
+- Sempre oriente o usuário a realizar alterações manualmente nas páginas do sistema (Professores, Faltas, Grade, etc.).
+
+Responda sempre em português claro, direto e útil para um diretor ou secretária de escola.${ctx}
 
 ${cfg.promptModuloIA}${acoesBloqueadas}
 
-RETORNE APENAS JSON VÁLIDO:
+RETORNE APENAS JSON VÁLIDO (apenas ações de análise):
 { "acao": "nome_da_acao", "params": { ... }, "confianca": 0-100, "explicacao": "breve justificativa" }
 
-AÇÕES DISPONÍVEIS: ${FERRAMENTAS.join(", ")}
+AÇÕES DISPONÍVEIS (somente advisor):
+${FERRAMENTAS.join(", ")}
 
-REGRAS CRÍTICAS:
-- NUNCA use "responder_pergunta" para pedidos de CRIAR, EDITAR, DELETAR, LISTAR, REGISTRAR, GERAR ou ALTERAR dados.
-- "responder_pergunta" é SOMENTE para dúvidas gerais sem ação no sistema (ex.: "o que é recreio intercalado?").
-- Você EXECUTA ações no banco via JSON — não oriente o usuário a fazer manualmente no sistema.
-- Vários itens no mesmo pedido → UM único JSON com array "nomes" ou "professores"/"materias" (cadastro em lote).
+REGRAS CRÍTICAS (modo advisor):
+- Você NÃO pode criar, editar, deletar ou gerar nada.
+- Use "analisar_escola", "sugerir_melhorias", "relatorio_professor", "prever_faltas", "responder_pergunta", "status_sistema", "resumo_semanal" e os "listar_*".
+- Se o usuário pedir para cadastrar, gerar grade, registrar falta, etc., responda com "responder_pergunta" explicando que ele deve fazer manualmente nas páginas e ofereça análise do estado atual.
+- "responder_pergunta" é para dúvidas ou quando a ação não é uma das listadas acima.
 
-REGRAS DE PARAMS (cadastro em lote — OBRIGATÓRIO):
-- criar_professor com VÁRIOS nomes:
-  { "nomes": ["Nome Completo 1", "Nome Completo 2", ...], "especialidades"?: ["Matéria"], "carga_horaria"?: number }
-  OU detalhado: { "professores": [{ "nome": "...", "email"?: "...", "especialidades"?: [], "carga_horaria"?: 20 }] }
-  NUNCA crie só um professor se o usuário pediu vários — extraia TODOS os nomes do texto.
-- criar_turma: { nome?, quantidade?: number, base_nome?, nomes?: string[], periodo?: "manha"|"tarde"|"integral", serie_nome? }
-  Ex.: "crie duas salas de maternal" → { quantidade: 2, base_nome: "Maternal", serie_nome: "Maternal", periodo: "manha" }
-  Ex.: "crie turmas Maternal A, Jardim 1 B e Pré A" → { nomes: ["Maternal A", "Jardim 1 B", "Pré A"] }
-- criar_materia com várias: { "nomes": ["Matemática", "Português", ...] } ou { "nome": "única" }
-- criar_periodo: { nome, tipo?: "entrada"|"aula"|"recreio"|"saida", hora_inicio?, hora_fim? }
-- criar_serie: { nome, ordem? }
-- editar_*: { busca ou nome } + campos alterados
-- deletar_*: { nome ou busca } — use SEMPRE "deletar_professor" (nunca excluir_professor)
-- deletar todos: { todos: true } ou { nome: "todos" }
-- registrar_falta: { professor_nome, motivo?, data? }
-- gerar_grade / gerar_recreio / limpar_grade: {} (cria dados faltantes automaticamente antes de executar). REGRA GRADE: um professor só pode lecionar em UMA turma por horário (dia+período); máx. 2 aulas seguidas no mesmo dia.
-- montar_escola_completa / gerar_tudo: { gerar_grade?: true, gerar_recreio?: true } — cria séries, turmas, professores, matérias, períodos e gera grade/recreio
-- adicionar_aula: { turma_nome, materia_nome, professor_nome, dia_semana?: 0-4 }
-- alterar_status_professor: { nome, status: "presente"|"ausente"|"ferias"|"licenca"|"atestado" }
-- criar_planejamento: { descricao, turma_nome?, materia_nome?, professor_nome? }
-- sugerir_substituto: { professor_nome? }
-- analisar_escola: {}
-- sugerir_melhorias: {}
-- relatorio_professor: { nome }
-- otimizar_grade: {}
-- prever_faltas: {}
-- responder_pergunta: { pergunta }
+EXEMPLOS DE USO CORRETO (advisor):
+- "analise a escola" → analisar_escola {}
+- "dê sugestões de melhoria" → sugerir_melhorias {}
+- "relatório do professor João" → relatorio_professor { nome: "João" }
+- "prever faltas" → prever_faltas {}
+- "qual o status hoje?" → status_sistema {}
+- "resumo da semana" → resumo_semanal {}
+- "o que é recreio intercalado?" → responder_pergunta { pergunta: "o que é recreio intercalado?" }
 
-EXEMPLOS:
-- "crie 5 professores com nomes Ana Silva, Bruno Costa, Carla Dias, Diego Lima e Elena Moura" → criar_professor { nomes: ["Ana Silva", "Bruno Costa", "Carla Dias", "Diego Lima", "Elena Moura"] }
-- "cadastre professores João Santos, Maria Oliveira e Pedro Almeida, especialidade matemática" → criar_professor { nomes: ["João Santos", "Maria Oliveira", "Pedro Almeida"], especialidades: ["Matemática"] }
-- "cadastra turma maternal c de manhã" → criar_turma { nome: "Maternal C", periodo: "manha" }
-- "crie duas salas de maternal" → criar_turma { quantidade: 2, base_nome: "Maternal", serie_nome: "Maternal", periodo: "manha" }
-- "crie 3 turmas jardim 1 tarde" → criar_turma { quantidade: 3, base_nome: "Jardim 1", serie_nome: "Jardim 1", periodo: "tarde" }
+NUNCA gere JSON com "criar_professor", "gerar_grade", "registrar_falta" etc. Esses comandos não existem mais no modo atual do chat.
 - "crie matérias Matemática, Português, Ciências e Artes" → criar_materia { nomes: ["Matemática", "Português", "Ciências", "Artes"] }
 - "maria silva faltou por atestado" → registrar_falta { professor_nome: "Maria Silva", motivo: "atestado médico" }
 - "monta a grade" → gerar_grade {}
@@ -469,17 +454,14 @@ export function pedidoExcluirTodos(comando?: string, params?: Record<string, unk
     /\b(?:exclu|delet|remov|apag)/i.test(comando)
 }
 
-/** Mensagens de sugestão proativa da IA */
+/** Sugestões proativas da ARIA (focadas em análise, dicas e visão — alterações são feitas manualmente pelo diretor/secretaria nas páginas) */
 export const SUGESTOES_RAPIDAS = [
-  "👥 Crie 3 professores: Ana Silva, João Costa e Maria Lima",
-  "🚀 Gere tudo: salas, professores e grade",
-  "🏫 Crie duas salas de Maternal",
-  "📊 Mostre o status geral",
-  "👥 Liste todos os professores",
-  "📅 Gere a grade horária",
-  "🎯 Analise minha escola",
-  "🔄 Organize o recreio",
-  "📋 Resumo semanal",
-  "⚠️ Verificar conflitos",
-  "🌟 Sugerir melhorias",
+  "🎯 Analise minha escola agora",
+  "🌟 Me dá sugestões de melhorias práticas",
+  "🔮 Prever faltas da próxima semana",
+  "📊 Qual o status geral hoje?",
+  "👥 Quais professores estão disponíveis?",
+  "📋 Gere um relatório da professora Maria",
+  "❓ Como está a frequência geral?",
+  "💡 O que posso melhorar na minha gestão?",
 ]

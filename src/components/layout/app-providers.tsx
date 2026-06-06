@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { ChatProvider } from "@/lib/chat-context"
 import { EscolaProvider } from "@/lib/escola-context"
 import { AriaFloatingButton } from "@/components/dashboard/aria-floating-button"
+import { ToastProvider } from "@/components/shared/toast"
 
 const ComandoCentral = dynamic(
   () =>
@@ -28,11 +29,13 @@ function ComandoCentralGate() {
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
-    <EscolaProvider>
-      <ChatProvider>
-        {children}
-        <ComandoCentralGate />
-      </ChatProvider>
-    </EscolaProvider>
+    <ToastProvider>
+      <EscolaProvider>
+        <ChatProvider>
+          {children}
+          <ComandoCentralGate />
+        </ChatProvider>
+      </EscolaProvider>
+    </ToastProvider>
   )
 }

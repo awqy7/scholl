@@ -49,7 +49,8 @@ function DashboardContent() {
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) return
 
-    const escolaId = userData.user.id
+    const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
+    const escolaId = await getCurrentEscolaId(userData.user.id)
 
     const [turmasRes, profsRes, eventosRes, subsRes, gradeRes, faltasRes] = await Promise.all([
       supabase.from("turmas").select("*, serie:series(*)").eq("escola_id", escolaId),

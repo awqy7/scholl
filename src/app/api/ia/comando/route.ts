@@ -52,6 +52,8 @@ export async function POST(request: Request) {
       ...(typeof contexto === "object" && contexto ? contexto : {}),
       tipoEscola,
       escolaNome: escolaRow?.nome,
+      // Richer context for LLM: current page helps give contextual advice (e.g. if on /grade, focus on grade issues)
+      currentPage: (typeof contexto === "object" && contexto?.currentPage) || "unknown",
     }
 
     const parsed = await interpretarComandoAria({

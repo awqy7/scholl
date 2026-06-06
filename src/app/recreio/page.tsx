@@ -13,6 +13,7 @@ import { Loading, EmptyState } from "@/components/shared/loading"
 import { DIAS_SEMANA } from "@/lib/utils"
 import { persistRecreioIntercalado } from "@/lib/persist-ia"
 import { TreePine, Sparkles, Trash2 } from "lucide-react"
+import { useToast } from "@/components/shared/toast"
 import type { RecreioIntercalado, Turma } from "@/types/database"
 
 export default function RecreioPage() {
@@ -27,6 +28,7 @@ export default function RecreioPage() {
 
 function RecreioContent() {
   const supabase = createClient()
+  const { showToast } = useToast()
   const [recreios, setRecreios] = useState<RecreioIntercalado[]>([])
   const [turmas, setTurmas] = useState<Turma[]>([])
   const [loading, setLoading] = useState(true)
@@ -36,7 +38,8 @@ function RecreioContent() {
   const carregar = useCallback(async () => {
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) return
-    const eId = userData.user.id
+    const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
+    const eId = await getCurrentEscolaId(userData.user.id)
 
     const [tRes, rRes] = await Promise.all([
       supabase.from("turmas").select("*, serie:series(*)").eq("escola_id", eId),
@@ -67,17 +70,19 @@ function RecreioContent() {
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error || "Erro ao gerar recreio")
 
+      const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
+      const eId = await getCurrentEscolaId(userData.user.id)
       const resultado = await persistRecreioIntercalado(
         supabase,
-        userData.user.id,
+        eId,
         payload,
         turmas.map((t) => ({ id: t.id, nome: t.nome, periodo: t.periodo }))
       )
       if (!resultado.ok) throw new Error(resultado.mensagem)
-      alert(resultado.mensagem)
+      showToast(resultado.mensagem, "success")
       carregar()
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Erro ao gerar recreio. Chave IA necessária.")
+      showToast(err instanceof Error ? err.message : "Erro ao gerar recreio. Chave IA necessária.", "error")
     }
     setGerando(false)
   }
@@ -85,7 +90,9 @@ function RecreioContent() {
   async function handleRemover() {
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) return
-    await supabase.from("recreio_intercalado").delete().eq("escola_id", userData.user.id)
+    const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
+    const eId = await getCurrentEscolaId(userData.user.id)
+    await supabase.from("recreio_intercalado").delete().eq("escola_id", eId)
     carregar()
   }
 
@@ -182,16 +189,16 @@ function RecreioAgora({ recreios }: { recreios: RecreioIntercalado[] }) {
           <p className="text-sm text-emerald-300/90">No recreio agora! ({recreioAtual.hora_inicio} - {recreioAtual.hora_fim})</p>
         </div>
       ) : (
-        <p className="text-gray-500 text-center py-4">Nenhuma turma no recreio agora</p>
+        <p className="text-center py-4" style={{ color: "var(--aria-text-muted)" }}>Nenhuma turma no recreio agora</p>
       )}
 
       {proximos.length > 0 && (
         <div>
-          <p className="text-sm font-medium text-gray-500 mb-2">Próximos recreios:</p>
+          <p className="text-sm font-medium mb-2" style={{ color: "var(--aria-text-muted)" }}>Próximos recreios:</p>
           {proximos.map((r) => (
             <div key={r.id} className="flex justify-between text-sm py-1">
               <span>{r.turma?.nome}</span>
-              <span className="text-gray-500">{r.hora_inicio}</span>
+              <span style={{ color: "var(--aria-text-muted)" }}>{r.hora_inicio}</span>
             </div>
           ))}
         </div>

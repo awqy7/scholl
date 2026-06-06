@@ -262,22 +262,32 @@ export function escolaTemRecreioIntercalado(tipo?: string | null): boolean {
 export function mensagemInicialAria(tipo?: string | null): string {
   const cfg = getConfigTipo(tipo)
   const linhaRecreio = cfg.recursos.recreioIntercalado
-    ? "\n• 🔄 Organizar **recreio intercalado** entre salas (exclusivo creche)"
+    ? "\n• 🔄 Pedir ajuda para organizar **recreio intercalado** (só creche)"
     : ""
-  return `🎯 **ARIA** — ${cfg.label}
+  return `🎯 **ARIA** — Assistente Inteligente (${cfg.label})
 
-Olá! Sou a **ARIA**. Fale como diretor — eu cadastro ${cfg.recursos.rotuloTurmas.toLowerCase()}, professores, matérias e executo no banco.
+Olá! Sou a **ARIA**. 
+Agora eu **não cadastro nem altero nada sozinho**. 
+O diretor e a secretaria controlam tudo manualmente (mais rápido, seguro e confiável).
 
-**Neste modo você pode:**
-• 📝 Criar/editar ${cfg.recursos.rotuloTurmas.toLowerCase()}, professores e matérias
-• 📋 Faltas e substituições
-• 📅 Gerar grade horária${linhaRecreio}
-• 📊 Analisar a escola
+**Eu posso ajudar com:**
+• 📊 Análise completa da escola + problemas
+• 💡 Sugestões práticas de melhorias
+• 🔮 Previsão de faltas e padrões
+• 📋 Relatórios de professores
+• ❓ Responder perguntas sobre a escola
+• ✨ Sugerir substitutos quando você registrar uma falta${linhaRecreio}
 
-**Exemplos:**
-${cfg.sugestoesAria.map((s) => `- *"${s.replace(/^[^\s]+\s/, "")}"*`).join("\n")}
+Use as páginas normais (Turmas, Professores, Faltas, Grade...) para fazer alterações.
+Fale comigo para eu analisar e dar dicas boas.
 
-💡 Fale naturalmente que eu entendo!`
+**Exemplos de conversa:**
+- "Analisa minha escola"
+- "Quais professores mais faltam?"
+- "Prever faltas da próxima semana"
+- "Me dá um relatório da Maria"
+
+Estou aqui para te dar visão clara, não para clicar por você.`
 }
 
 export function mensagemRecursoIndisponivel(acao: string, tipo?: string | null): string {

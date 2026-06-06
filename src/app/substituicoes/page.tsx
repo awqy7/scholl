@@ -32,7 +32,9 @@ function SubstituicoesContent() {
   const carregar = useCallback(async () => {
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) return
-    const eId = userData.user.id
+
+    const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
+    const eId = await getCurrentEscolaId(userData.user.id)
 
     const [sRes, fRes, pRes] = await Promise.all([
       supabase.from("substituicoes").select("*, professor_original:professores!professor_original_id(*), professor_substituto:professores!professor_substituto_id(*)").eq("escola_id", eId).order("created_at", { ascending: false }),
@@ -69,8 +71,10 @@ function SubstituicoesContent() {
       if (substituto) {
         const { data: userData } = await supabase.auth.getUser()
         if (!userData.user) return
+        const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
+        const eId = await getCurrentEscolaId(userData.user.id)
         await supabase.from("substituicoes").insert({
-          escola_id: userData.user.id,
+          escola_id: eId,
           falta_id: sub.id,
           professor_original_id: sub.professor_id,
           professor_substituto_id: substituto.id,
@@ -78,7 +82,7 @@ function SubstituicoesContent() {
           status: "pendente",
         })
         await supabase.from("eventos_tempo_real").insert({
-          escola_id: userData.user.id,
+          escola_id: eId,
           tipo: "substituicao",
           mensagem: `IA sugeriu ${substituto.nome} para substituir ${sub.professor?.nome}`,
           professor_id: substituto.id,

@@ -10,9 +10,17 @@ import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Loading, EmptyState } from "@/components/shared/loading"
-import { Plus, Pencil, Trash2, Users, RefreshCw } from "lucide-react"
+import { Plus, Pencil, Trash2, Users, RefreshCw, Brain } from "lucide-react"
 import Link from "next/link"
 import type { Turma, Serie } from "@/types/database"
+import { useToast } from "@/components/shared/toast"
+import { z } from "zod"
+
+const turmaSchema = z.object({
+  nome: z.string().min(2, "Nome da turma deve ter pelo menos 2 caracteres"),
+  periodo: z.enum(["manha", "tarde", "integral"]),
+  serie_id: z.string().optional(),
+})
 
 export default function TurmasPage() {
   return (
@@ -24,6 +32,7 @@ export default function TurmasPage() {
 
 function TurmasContent() {
   const supabase = createClient()
+  const { showToast } = useToast()
   const [turmas, setTurmas] = useState<Turma[]>([])
   const [series, setSeries] = useState<Serie[]>([])
   const [loading, setLoading] = useState(true)
@@ -33,14 +42,21 @@ function TurmasContent() {
   const [serieId, setSerieId] = useState("")
   const [periodo, setPeriodo] = useState("manha")
   const [novaSerie, setNovaSerie] = useState("")
+  const [search, setSearch] = useState("")
 
-  const escolaId = "escola_id_placeholder"
+  const filteredTurmas = turmas.filter((t) =>
+    t.nome.toLowerCase().includes(search.toLowerCase())
+  )
+
+  // escolaId is resolved per operation via getUser() + legacy/membership support (see api-auth + migrations/00005)
 
   const carregar = useCallback(async () => {
     setLoading(true)
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) { setLoading(false); return }
-    const eId = userData.user.id
+
+    const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
+    const eId = await getCurrentEscolaId(userData.user.id)
 
     const [turmasRes, seriesRes] = await Promise.all([
       supabase.from("turmas").select("*, serie:series(*)").eq("escola_id", eId),
@@ -63,14 +79,26 @@ function TurmasContent() {
     e.preventDefault()
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) return
-    const eId = userData.user.id
 
-    const data = { escola_id: eId, nome, serie_id: serieId, periodo }
+    const parsed = turmaSchema.safeParse({ nome, periodo, serie_id: serieId || undefined })
+    if (!parsed.success) {
+      showToast(parsed.error.issues[0]?.message || "Dados inválidos", "error")
+      return
+    }
+
+    const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
+    const eId = await getCurrentEscolaId(userData.user.id)
+
+    const data = { escola_id: eId, nome: parsed.data.nome, serie_id: parsed.data.serie_id || null, periodo: parsed.data.periodo }
 
     if (editingId) {
-      await supabase.from("turmas").update(data).eq("id", editingId)
+      const { error } = await supabase.from("turmas").update(data).eq("id", editingId)
+      if (error) showToast("Erro ao atualizar: " + error.message, "error")
+      else showToast("Turma atualizada!", "success")
     } else {
-      await supabase.from("turmas").insert(data)
+      const { error } = await supabase.from("turmas").insert(data)
+      if (error) showToast("Erro ao criar: " + error.message, "error")
+      else showToast("Turma criada!", "success")
     }
 
     resetForm()
@@ -94,8 +122,10 @@ function TurmasContent() {
     if (!novaSerie) return
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) return
+    const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
+    const eIdForSerie = await getCurrentEscolaId(userData.user.id)
     await supabase.from("series").insert({
-      escola_id: userData.user.id,
+      escola_id: eIdForSerie,
       nome: novaSerie,
       ordem: series.length + 1,
     })
@@ -115,9 +145,21 @@ function TurmasContent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-100">Turmas</h1>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <h1 className="page-title">Turmas</h1>
         <div className="flex gap-2">
+          <Input
+            placeholder="Buscar turma..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-48"
+          />
+          <Button
+            variant="outline"
+            onClick={() => window.dispatchEvent(new CustomEvent("aria:abrir-chat"))}
+          >
+            <Brain className="h-4 w-4 mr-2" /> Análise com ARIA
+          </Button>
           <Button variant="outline" onClick={carregar} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
             Atualizar
@@ -196,8 +238,8 @@ function TurmasContent() {
             />
           ) : (
             <div className="divide-y">
-              {turmas.map((turma) => (
-                <div key={turma.id} className="flex items-center justify-between p-4 hover:bg-gray-50">
+              {filteredTurmas.map((turma) => (
+                <div key={turma.id} className="flex items-center justify-between p-4 hover:bg-[var(--aria-surface-hover)]" style={{ background: "var(--aria-surface)" }}>
                   <div>
                     <p className="font-medium">{turma.nome}</p>
                     <div className="flex gap-2 mt-1">

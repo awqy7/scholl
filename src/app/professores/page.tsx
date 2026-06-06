@@ -10,7 +10,18 @@ import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Loading, EmptyState } from "@/components/shared/loading"
-import { Plus, Pencil, Trash2, BookOpen } from "lucide-react"
+import { Plus, Pencil, Trash2, BookOpen, Brain } from "lucide-react"
+import { useToast } from "@/components/shared/toast"
+import { z } from "zod"
+
+const professorSchema = z.object({
+  nome: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
+  email: z.string().email("Email inválido").or(z.literal("")),
+  telefone: z.string().optional(),
+  especialidades: z.string().optional(),
+  status: z.enum(["presente", "ausente", "ferias", "licenca", "atestado"]),
+  carga_horaria: z.number().min(1).max(60),
+})
 import type { Professor } from "@/types/database"
 
 export default function ProfessoresPage() {
@@ -23,6 +34,7 @@ export default function ProfessoresPage() {
 
 function ProfessoresContent() {
   const supabase = createClient()
+  const { showToast } = useToast()
   const [professores, setProfessores] = useState<Professor[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -41,11 +53,16 @@ function ProfessoresContent() {
 
   const carregar = useCallback(async () => {
     const { data: userData } = await supabase.auth.getUser()
-    if (!userData.user) return
+    if (!userData.user) { setLoading(false); return }
+
+    // Use membership resolver (supports new tenancy model + legacy)
+    const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
+    const eId = await getCurrentEscolaId(userData.user.id)
+
     const res = await supabase
       .from("professores")
       .select("*")
-      .eq("escola_id", userData.user.id)
+      .eq("escola_id", eId)
     if (res.data) setProfessores(res.data)
     setLoading(false)
   }, [supabase])
@@ -63,24 +80,52 @@ function ProfessoresContent() {
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) return
 
-    const data = {
-      escola_id: userData.user.id,
+    const parsed = professorSchema.safeParse({
       ...form,
-      especialidades: form.especialidades.split(",").map((s) => s.trim()),
+      carga_horaria: Number(form.carga_horaria),
+    })
+
+    if (!parsed.success) {
+      const firstError = parsed.error.issues[0]?.message || "Dados inválidos"
+      showToast(firstError, "error")
+      return
+    }
+
+    const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
+    const eId = await getCurrentEscolaId(userData.user.id)
+
+    const data = {
+      escola_id: eId,
+      nome: parsed.data.nome,
+      email: parsed.data.email || "",
+      telefone: parsed.data.telefone || "",
+      especialidades: (parsed.data.especialidades || "").split(",").map((s) => s.trim()).filter(Boolean),
+      status: parsed.data.status,
+      carga_horaria: parsed.data.carga_horaria,
     }
 
     if (editingId) {
-      await supabase.from("professores").update(data).eq("id", editingId)
+      const { error } = await supabase.from("professores").update(data).eq("id", editingId)
+      if (error) showToast("Erro ao atualizar: " + error.message, "error")
+      else showToast("Professor atualizado com sucesso!", "success")
     } else {
-      await supabase.from("professores").insert(data)
+      const { error } = await supabase.from("professores").insert(data)
+      if (error) showToast("Erro ao cadastrar: " + error.message, "error")
+      else showToast("Professor cadastrado com sucesso!", "success")
     }
     resetForm()
     carregar()
   }
 
-  async function handleDelete(id: string) {
-    await supabase.from("professores").delete().eq("id", id)
-    carregar()
+  async function handleDelete(id: string, nome: string) {
+    if (!window.confirm(`Excluir o professor "${nome}"?\n\nEsta ação não pode ser desfeita.`)) return
+    const { error } = await supabase.from("professores").delete().eq("id", id)
+    if (error) {
+      showToast("Erro ao excluir: " + error.message, "error")
+    } else {
+      showToast("Professor removido.", "success")
+      carregar()
+    }
   }
 
   function editProf(p: Professor) {
@@ -92,6 +137,13 @@ function ProfessoresContent() {
     setEditingId(p.id)
     setShowForm(true)
   }
+
+  // Simple client-side search (fast UX win)
+  const [search, setSearch] = useState("")
+  const filteredProfessores = professores.filter((p) =>
+    p.nome.toLowerCase().includes(search.toLowerCase()) ||
+    (p.especialidades || []).join(" ").toLowerCase().includes(search.toLowerCase())
+  )
 
   function resetForm() {
     setForm({ nome: "", email: "", telefone: "", especialidades: "", status: "presente", carga_horaria: 20 })
@@ -109,12 +161,20 @@ function ProfessoresContent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <h1 className="text-2xl font-bold">Professores</h1>
-        <Button onClick={() => { resetForm(); setShowForm(!showForm) }}>
-          <Plus className="h-4 w-4 mr-2" />
-          {showForm ? "Cancelar" : "Novo Professor"}
-        </Button>
+        <div className="flex gap-2 items-center">
+          <Input
+            placeholder="Buscar por nome ou especialidade..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-64"
+          />
+          <Button onClick={() => { resetForm(); setShowForm(!showForm) }}>
+            <Plus className="h-4 w-4 mr-2" />
+            {showForm ? "Cancelar" : "Novo Professor"}
+          </Button>
+        </div>
       </div>
 
       {showForm && (
@@ -173,7 +233,7 @@ function ProfessoresContent() {
             <EmptyState icon={<BookOpen className="h-12 w-12" />} title="Nenhum professor cadastrado" description="Adicione professores para começar" />
           ) : (
             <div className="divide-y">
-              {professores.map((p) => (
+              {filteredProfessores.map((p) => (
                 <div key={p.id} className="flex items-center justify-between p-4 hover:bg-gray-50">
                   <div>
                     <p className="font-medium">{p.nome}</p>
@@ -186,10 +246,21 @@ function ProfessoresContent() {
                     <p className="text-xs text-gray-400 mt-1">{p.email} | {p.carga_horaria}h/semana</p>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => editProf(p)}>
+                    <Button variant="ghost" size="sm" onClick={() => editProf(p)} title="Editar">
                       <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(p.id)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        window.dispatchEvent(new CustomEvent("aria:abrir-chat"))
+                        // User can then type: "relatório do [nome]" or "detalhes do professor [nome]"
+                      }}
+                      title="Relatório e análise com ARIA"
+                    >
+                      <Brain className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleDelete(p.id, p.nome)} title="Excluir">
                       <Trash2 className="h-4 w-4 text-red-500" />
                     </Button>
                   </div>
