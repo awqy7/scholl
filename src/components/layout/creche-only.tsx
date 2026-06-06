@@ -22,7 +22,7 @@ export function CrecheOnly({ children }: { children: React.ReactNode }) {
           Sua escola está cadastrada como <strong>{config.label}</strong>.
         </p>
         <p className="text-xs text-gray-400">
-          Na escola regular, use períodos de recreio fixos na grade horária.
+          Na escola regular, use a seção <strong>Rotina</strong> para grade e horários.
         </p>
         <Link href="/dashboard">
           <Button variant="outline" className="mt-2">

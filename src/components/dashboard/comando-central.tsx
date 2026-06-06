@@ -56,7 +56,14 @@ export function ComandoCentral() {
   useEffect(() => {
     setPortalReady(true)
     if (consumirPedidoAbrirChat()) setAberto(true)
-    const onOpen = () => setAberto(true)
+
+    const onOpen = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ prompt?: string }>).detail
+      if (detail?.prompt) {
+        setInput(detail.prompt)
+      }
+      setAberto(true)
+    }
     window.addEventListener("aria:abrir-chat", onOpen as EventListener)
     return () => window.removeEventListener("aria:abrir-chat", onOpen as EventListener)
   }, [])

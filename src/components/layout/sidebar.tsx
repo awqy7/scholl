@@ -8,13 +8,9 @@ import {
   Calendar,
   Users,
   BookOpen,
-  Clock,
-  TreePine,
   UserX,
-  RefreshCw,
   ClipboardList,
   LogOut,
-  GraduationCap,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
@@ -27,39 +23,26 @@ type MenuItem = {
   label: string
   labelCreche?: string
   icon: typeof LayoutDashboard
-  group: "main" | "cadastros" | "operacional"
   onlyCreche?: boolean
 }
 
+// MENU SIMPLIFICADO — máximo 6 seções principais
+// O objetivo é que o usuário nunca se perca.
+// Coisas relacionadas (horários, grade, recreio) ficam dentro de "Rotina".
+// Faltas + Substituições ficam dentro de "Ausências".
+// Professores + Monitores ficam dentro de "Equipe".
 const menuItems: MenuItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, group: "main" },
+  { href: "/dashboard", label: "Painel", icon: LayoutDashboard },
   {
     href: "/turmas",
-    label: "Turmas",
+    label: "Salas",
     labelCreche: "Salas",
     icon: Users,
-    group: "cadastros",
   },
-  { href: "/professores", label: "Professores", icon: BookOpen, group: "cadastros" },
-  { href: "/materias", label: "Matérias", icon: GraduationCap, group: "cadastros" },
-  { href: "/horarios", label: "Períodos", icon: Clock, group: "cadastros" },
-  { href: "/grade", label: "Grade", icon: Calendar, group: "operacional" },
-  {
-    href: "/recreio",
-    label: "Recreio",
-    icon: TreePine,
-    group: "operacional",
-    onlyCreche: true,
-  },
-  { href: "/faltas", label: "Faltas", icon: UserX, group: "operacional" },
-  { href: "/substituicoes", label: "Substituições", icon: RefreshCw, group: "operacional" },
-  { href: "/planejamento", label: "Planejamento", icon: ClipboardList, group: "operacional" },
-]
-
-const groups: { key: MenuItem["group"]; label: string }[] = [
-  { key: "main", label: "Visão" },
-  { key: "cadastros", label: "Cadastros" },
-  { key: "operacional", label: "Operação" },
+  { href: "/equipe", label: "Equipe", icon: BookOpen },
+  { href: "/rotina", label: "Rotina", icon: Calendar },
+  { href: "/ausencias", label: "Ausências", icon: UserX },
+  { href: "/planejamento", label: "Planejamento", icon: ClipboardList },
 ]
 
 function NavLink({
@@ -91,6 +74,8 @@ export function Sidebar() {
   const supabase = createClient()
   const { tipo, config } = useEscola()
   const temRecreio = escolaTemRecreioIntercalado(tipo)
+
+  // Filtra itens (ex: recreio só para creche, mas como agora está dentro de Rotina, quase tudo visível)
   const itensVisiveis = menuItems.filter((item) => !item.onlyCreche || temRecreio)
 
   function rotulo(item: MenuItem) {
@@ -118,30 +103,26 @@ export function Sidebar() {
         </p>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
-        {groups.map((group) => {
-          const items = itensVisiveis.filter((i) => i.group === group.key)
-          if (!items.length) return null
-          return (
-            <div key={group.key}>
-              <p className="aria-nav-label">{group.label}</p>
-              <div className="flex flex-col gap-0.5">
-                {items.map((item) => {
-                  const active =
-                    pathname === item.href || pathname.startsWith(item.href + "/")
-                  return (
-                    <NavLink
-                      key={item.href}
-                      item={item}
-                      label={rotulo(item)}
-                      active={active}
-                    />
-                  )
-                })}
-              </div>
-            </div>
-          )
-        })}
+      <nav className="flex-1 overflow-y-auto px-3 py-4">
+        <div className="flex flex-col gap-0.5">
+          {itensVisiveis.map((item) => {
+            const active =
+              pathname === item.href || pathname.startsWith(item.href + "/")
+            return (
+              <NavLink
+                key={item.href}
+                item={item}
+                label={rotulo(item)}
+                active={active}
+              />
+            )
+          })}
+        </div>
+
+        {/* Pequena ajuda visual */}
+        <div className="mt-6 px-2 text-[10px] opacity-50 leading-tight">
+          Tudo organizado em poucas seções.<br />Use o Painel para atalhos rápidos.
+        </div>
       </nav>
 
       <div className="shrink-0 p-3 border-t" style={{ borderColor: "var(--aria-border)" }}>

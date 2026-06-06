@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useEffect, useState, useCallback, useRef } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import { Loading } from "@/components/shared/loading"
 import {
   Users, BookOpen, Clock, AlertTriangle,
@@ -31,6 +32,7 @@ function DashboardContent() {
   const mostraRecreio = escolaTemRecreioIntercalado(tipo)
   const [turmas, setTurmas] = useState<Turma[]>([])
   const [professores, setProfessores] = useState<Professor[]>([])
+  const [monitores, setMonitores] = useState<any[]>([])
   const [eventos, setEventos] = useState<EventoTempoReal[]>([])
   const [loading, setLoading] = useState(true)
   const [horaAtual, setHoraAtual] = useState(new Date())
@@ -39,6 +41,9 @@ function DashboardContent() {
   const [totalAulas, setTotalAulas] = useState(0)
   const [totalFaltasHoje, setTotalFaltasHoje] = useState(0)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+
+  // Salas que precisam de atenção hoje (padrão ausente + sem cobertura ativa)
+  const [salasSemCobertura, setSalasSemCobertura] = useState<any[]>([])
 
   useEffect(() => {
     const timer = setInterval(() => setHoraAtual(new Date()), 1000)
@@ -52,9 +57,11 @@ function DashboardContent() {
     const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
     const escolaId = await getCurrentEscolaId(userData.user.id)
 
-    const [turmasRes, profsRes, eventosRes, subsRes, gradeRes, faltasRes] = await Promise.all([
-      supabase.from("turmas").select("*, serie:series(*)").eq("escola_id", escolaId),
+    const hoje = new Date().toISOString().split("T")[0]
+    const [turmasRes, profsRes, monRes, eventosRes, subsRes, gradeRes, faltasRes, subsDetailRes] = await Promise.all([
+      supabase.from("turmas").select("*, serie:series(*), professor_responsavel:professores!professor_responsavel_id(*), monitor_responsavel:monitores!monitor_responsavel_id(*)").eq("escola_id", escolaId),
       supabase.from("professores").select("*").eq("escola_id", escolaId),
+      supabase.from("monitores").select("*").eq("escola_id", escolaId),
       supabase
         .from("eventos_tempo_real")
         .select("*, turma:turmas(*), professor:professores(*)")
@@ -72,17 +79,34 @@ function DashboardContent() {
         .eq("escola_id", escolaId),
       supabase
         .from("faltas")
-        .select("id", { count: "exact", head: true })
+        .select("professor_id")
         .eq("escola_id", escolaId)
-        .eq("data", new Date().toISOString().split("T")[0]),
+        .eq("data", hoje),
+      supabase
+        .from("substituicoes")
+        .select("professor_original_id, professor_substituto_id")
+        .eq("escola_id", escolaId)
+        .eq("data", hoje),
     ])
 
-    if (turmasRes.data) setTurmas(turmasRes.data)
+    if (turmasRes.data) setTurmas(turmasRes.data as any)
     if (profsRes.data) setProfessores(profsRes.data)
+    if (monRes.data) setMonitores(monRes.data as any)
     if (eventosRes.data) setEventos(eventosRes.data)
     setSubstituicoesPendentes(subsRes.count || 0)
     setTotalAulas(gradeRes.count || 0)
     setTotalFaltasHoje(faltasRes.count || 0)
+
+    // Cálculo profundo de "salas sem cobertura hoje"
+    const profAbsent = new Set((faltasRes.data || []).map((f: any) => f.professor_id))
+    const coveredOriginals = new Set((subsDetailRes.data || []).map((s: any) => s.professor_original_id))
+    const criticas = (turmasRes.data || []).filter((t: any) => {
+      const profAus = t.professor_responsavel_id && profAbsent.has(t.professor_responsavel_id)
+      const monAus = t.monitor_responsavel_id && monRes.data?.some((m: any) => m.id === t.monitor_responsavel_id && m.status && m.status !== "presente")
+      const temCobertura = t.professor_responsavel_id && coveredOriginals.has(t.professor_responsavel_id)
+      return (profAus || monAus) && !temCobertura
+    })
+    setSalasSemCobertura(criticas)
     const { data: escola } = await supabase
       .from("escolas")
       .select("nome")
@@ -222,7 +246,7 @@ function DashboardContent() {
           value={professores.length}
           sub={`${presencaPercent}% de presença`}
           color="blue"
-          href="/professores"
+          href="/equipe"
         />
         <StatsCard
           icon={UserCheck}
@@ -231,7 +255,7 @@ function DashboardContent() {
           sub={`${professoresAusentes} ausentes`}
           color="emerald"
           trend={professoresAusentes > 0 ? "down" : "up"}
-          href="/professores"
+          href="/equipe"
         />
         <StatsCard
           icon={Activity}
@@ -239,7 +263,7 @@ function DashboardContent() {
           value={totalAulas}
           sub="esta semana"
           color="purple"
-          href="/grade"
+          href="/rotina"
         />
       </div>
 
@@ -247,7 +271,7 @@ function DashboardContent() {
       {(professoresAusentes > 0 || substituicoesPendentes > 0 || totalFaltasHoje > 0) && (
         <div className="flex gap-3 flex-wrap">
           {professoresAusentes > 0 && (
-            <Link href="/professores">
+            <Link href="/equipe">
               <AlertBadge
                 icon={AlertTriangle}
                 text={`${professoresAusentes} professor(es) ausente(s)`}
@@ -256,7 +280,7 @@ function DashboardContent() {
             </Link>
           )}
           {substituicoesPendentes > 0 && (
-            <Link href="/substituicoes">
+            <Link href="/ausencias">
               <AlertBadge
                 icon={RefreshCw}
                 text={`${substituicoesPendentes} substituição(ões) pendente(s)`}
@@ -265,7 +289,7 @@ function DashboardContent() {
             </Link>
           )}
           {totalFaltasHoje > 0 && (
-            <Link href="/faltas">
+            <Link href="/ausencias">
               <AlertBadge
                 icon={UserCheck}
                 text={`${totalFaltasHoje} falta(s) hoje`}
@@ -274,6 +298,27 @@ function DashboardContent() {
             </Link>
           )}
         </div>
+      )}
+
+      {/* Salas sem cobertura hoje - cálculo a partir de padrões + faltas + substituições (o coração da interligação) */}
+      {salasSemCobertura.length > 0 && (
+        <Card className="border-red-500/40 bg-red-950/20">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2 text-red-300">
+              <AlertTriangle className="h-4 w-4" />
+              <span className="font-semibold">{salasSemCobertura.length} sala(s) com padrão ausente e sem cobertura registrada</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {salasSemCobertura.slice(0, 6).map((t: any) => (
+                <Link key={t.id} href="/ausencias">
+                  <Badge variant="danger" className="cursor-pointer">{t.nome} (sem cobertura)</Badge>
+                </Link>
+              ))}
+              {salasSemCobertura.length > 6 && <span className="text-xs self-center opacity-60">+{salasSemCobertura.length - 6}</span>}
+            </div>
+            <p className="text-xs mt-2 opacity-70">Vá em Ausências → registre a falta ou aplique substituto. O Recreio Escalonado também reflete automaticamente.</p>
+          </CardContent>
+        </Card>
       )}
 
       {/* Conteúdo principal */}
@@ -412,7 +457,7 @@ function DashboardContent() {
               </div>
             </div>
 
-            <Link href="/professores" className="block mt-3">
+            <Link href="/equipe" className="block mt-3">
               <Button
                 variant="outline"
                 size="sm"
@@ -428,7 +473,7 @@ function DashboardContent() {
             <h3 className="text-sm font-semibold text-white mb-3">Acesso Rápido</h3>
             <div className="space-y-2">
               <QuickLink
-                href="/grade"
+                href="/rotina"
                 icon={Calendar}
                 label="Grade Horária"
                 sub={`${totalAulas} aulas`}
@@ -436,7 +481,7 @@ function DashboardContent() {
               />
               {mostraRecreio && (
                 <QuickLink
-                  href="/recreio"
+                  href="/rotina"
                   icon={TreePine}
                   label="Recreio"
                   sub="Intercalado"
@@ -444,7 +489,7 @@ function DashboardContent() {
                 />
               )}
               <QuickLink
-                href="/substituicoes"
+                href="/ausencias"
                 icon={RefreshCw}
                 label="Substituições"
                 sub={substituicoesPendentes > 0 ? `${substituicoesPendentes} pendentes` : "Nenhuma pendente"}

@@ -43,6 +43,11 @@ function FaltasContent() {
     professor_id: "", motivo: "Atestado médico", status: "justificada" as const,
   })
 
+  // Para creche e interligação: turmas afetadas + substitutos sugeridos
+  const [affectedTurmas, setAffectedTurmas] = useState<any[]>([])
+  const [suggestedSubs, setSuggestedSubs] = useState<any[]>([])
+  const [selectedSub, setSelectedSub] = useState("")
+
   const carregar = useCallback(async () => {
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) { setLoading(false); return }
@@ -61,6 +66,62 @@ function FaltasContent() {
 
   useEffect(() => { carregar() }, [carregar])
 
+  async function loadSuggestionsForFalta(profId: string) {
+    const { data: userData } = await supabase.auth.getUser()
+    if (!userData.user) return
+    const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
+    const eId = await getCurrentEscolaId(userData.user.id)
+
+    // Turmas onde este professor é o padrão (afeta diretamente)
+    const { data: aff } = await supabase
+      .from("turmas")
+      .select("id, nome")
+      .eq("escola_id", eId)
+      .eq("professor_responsavel_id", profId)
+    setAffectedTurmas(aff || [])
+
+    // Professores disponíveis (presentes, diferentes do que faltou)
+    const { data: avail } = await supabase
+      .from("professores")
+      .select("id, nome")
+      .eq("escola_id", eId)
+      .eq("status", "presente")
+      .neq("id", profId)
+
+    let subs = avail || []
+
+    if (aff && aff.length > 0) {
+      const affectedIds = aff.map((t: any) => t.id)
+      // Quais destes disponíveis são padrão de alguma das turmas afetadas?
+      const { data: covering } = await supabase
+        .from("turmas")
+        .select("professor_responsavel_id")
+        .in("id", affectedIds)
+        .not("professor_responsavel_id", "is", null)
+      const prio = new Set((covering || []).map((c: any) => c.professor_responsavel_id))
+      subs = subs.sort((a: any, b: any) => {
+        const aP = prio.has(a.id) ? 1 : 0
+        const bP = prio.has(b.id) ? 1 : 0
+        return bP - aP
+      })
+    }
+
+    // Sort already done prioritizing padrões das turmas afetadas
+    setSuggestedSubs(subs)
+    if (subs.length > 0) setSelectedSub(subs[0].id)
+  }
+
+  // Carrega turmas afetadas e substitutos sugeridos quando o professor da falta muda
+  useEffect(() => {
+    if (form.professor_id) {
+      loadSuggestionsForFalta(form.professor_id)
+    } else {
+      setAffectedTurmas([])
+      setSuggestedSubs([])
+      setSelectedSub("")
+    }
+  }, [form.professor_id])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const { data: userData } = await supabase.auth.getUser()
@@ -75,15 +136,16 @@ function FaltasContent() {
     const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
     const eId = await getCurrentEscolaId(userData.user.id)
 
-    const { error } = await supabase.from("faltas").insert({
+    // Inserir falta e obter o id para linkar com substituição
+    const { data: newFalta, error } = await supabase.from("faltas").insert({
       escola_id: eId,
       professor_id: parsed.data.professor_id,
       data: new Date().toISOString().split("T")[0],
       motivo: parsed.data.motivo,
       status: parsed.data.status,
-    })
+    }).select().single()
 
-    if (!error) {
+    if (!error && newFalta) {
       const prof = professores.find((p) => p.id === parsed.data.professor_id)
       await supabase.from("professores").update({ status: "ausente" }).eq("id", parsed.data.professor_id)
       await supabase.from("eventos_tempo_real").insert({
@@ -92,7 +154,28 @@ function FaltasContent() {
         mensagem: `${prof?.nome} registrou falta - ${parsed.data.motivo}`,
         professor_id: parsed.data.professor_id,
       })
-      showToast("Falta registrada. Use a ARIA para sugestão de substituto!", "success")
+
+      // Se o usuário escolheu um substituto sugerido, cria a ligação automaticamente
+      // (interligação forte entre Faltas ↔ Substituições ↔ Turmas com padrão)
+      if (selectedSub) {
+        await supabase.from("substituicoes").insert({
+          escola_id: eId,
+          falta_id: newFalta.id,
+          professor_original_id: parsed.data.professor_id,
+          professor_substituto_id: selectedSub,
+          data: new Date().toISOString().split("T")[0],
+          status: "pendente",
+        })
+        const subProf = professores.find((p) => p.id === selectedSub)
+        await supabase.from("eventos_tempo_real").insert({
+          escola_id: eId,
+          tipo: "substituicao",
+          mensagem: `Sugestão de cobertura: ${subProf?.nome} para ${prof?.nome}`,
+          professor_id: selectedSub,
+        })
+      }
+
+      showToast(selectedSub ? "Falta registrada + substituição sugerida criada automaticamente (interligada com as turmas afetadas)!" : "Falta registrada.", "success")
       carregar()
     } else {
       showToast("Erro ao registrar falta.", "error")
@@ -105,7 +188,10 @@ function FaltasContent() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-2xl font-bold">Faltas</h1>
+        <div>
+          <h1 className="text-2xl font-bold">Faltas</h1>
+          <p className="text-xs opacity-60">Versão legada. Use <a href="/ausencias" className="underline">Ausências</a> para o fluxo completo com sugestões automáticas baseadas em padrões das salas + impacto no recreio.</p>
+        </div>
         <div className="flex gap-2">
           <Button
             variant="outline"
@@ -146,6 +232,34 @@ function FaltasContent() {
                   <option value="injustificada">Injustificada</option>
                 </Select>
               </div>
+
+              {/* Interligação com turmas: mostra impacto e sugere cobertura automaticamente */}
+              {form.professor_id && (affectedTurmas.length > 0 || suggestedSubs.length > 0) && (
+                <div className="space-y-3 border-t pt-3 text-sm">
+                  {affectedTurmas.length > 0 && (
+                    <div>
+                      <Label className="text-xs">Turmas que ficarão sem o responsável padrão hoje (este professor é o padrão delas):</Label>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {affectedTurmas.map((t: any) => <Badge key={t.id} variant="warning">{t.nome}</Badge>)}
+                      </div>
+                    </div>
+                  )}
+
+                  {suggestedSubs.length > 0 && (
+                    <div>
+                      <Label>Substituto sugerido (o sistema prioriza quem já é padrão destas turmas)</Label>
+                      <Select value={selectedSub} onChange={(e) => setSelectedSub(e.target.value)}>
+                        <option value="">— escolher depois —</option>
+                        {suggestedSubs.map((p: any) => (
+                          <option key={p.id} value={p.id}>{p.nome}</option>
+                        ))}
+                      </Select>
+                      <p className="text-[10px] text-emerald-600 mt-0.5">Sugestão automática baseada nas salas afetadas e disponibilidade atual.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <Button type="submit">Registrar</Button>
                 <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>

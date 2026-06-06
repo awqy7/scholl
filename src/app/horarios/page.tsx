@@ -40,7 +40,9 @@ function HorariosContent() {
   const carregar = useCallback(async () => {
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) return
-    const res = await supabase.from("periodos").select("*").eq("escola_id", userData.user.id).order("ordem")
+    const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
+    const eId = await getCurrentEscolaId(userData.user.id)
+    const res = await supabase.from("periodos").select("*").eq("escola_id", eId).order("ordem")
     if (res.data) setPeriodos(res.data)
     setLoading(false)
   }, [supabase])
@@ -51,7 +53,9 @@ function HorariosContent() {
     e.preventDefault()
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) return
-    const data = { escola_id: userData.user.id, ...form }
+    const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
+    const eId = await getCurrentEscolaId(userData.user.id)
+    const data = { escola_id: eId, ...form }
 
     if (editingId) {
       await supabase.from("periodos").update(data).eq("id", editingId)

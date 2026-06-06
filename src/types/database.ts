@@ -21,8 +21,14 @@ export interface Turma {
   nome: string
   periodo: "manha" | "tarde" | "integral"
   created_at: string
+  // Responsáveis padrão da sala (usados para automação no recreio escalonado etc.)
+  professor_responsavel_id?: string | null
+  monitor_responsavel_id?: string | null
   serie?: Serie
   professores?: Professor[]
+  // Joins quando carregados
+  professor_responsavel?: Professor
+  monitor_responsavel?: Monitor
 }
 
 export interface Professor {
@@ -129,4 +135,42 @@ export interface EventoTempoReal {
   created_at: string
   turma?: Turma
   professor?: Professor
+}
+
+// ============================================
+// CRECHE - RECREIO ESCALONADO COMPLETO
+// ============================================
+
+export interface Monitor {
+  id: string
+  escola_id: string
+  nome: string
+  telefone?: string | null
+  created_at: string
+}
+
+export interface RecreioSupervisao {
+  id: string
+  escola_id: string
+  periodo_id: string
+  dia_semana: number
+  turma_id: string
+  professor_id?: string | null
+  monitor_id?: string | null
+  created_at: string
+
+  // Joins
+  turma?: Turma
+  periodo?: Periodo
+  professor?: Professor
+  monitor?: Monitor
+}
+
+export interface RecreioAtividade {
+  id: string
+  recreio_supervisao_id: string
+  descricao: string
+  duracao_minutos?: number | null
+  ordem: number
+  created_at: string
 }

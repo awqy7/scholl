@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Loading, EmptyState } from "@/components/shared/loading"
 import { Plus, Pencil, Trash2, Users, RefreshCw, Brain } from "lucide-react"
 import Link from "next/link"
-import type { Turma, Serie } from "@/types/database"
+import type { Turma, Serie, Professor, Monitor } from "@/types/database"
 import { useToast } from "@/components/shared/toast"
 import { z } from "zod"
 
@@ -35,14 +35,22 @@ function TurmasContent() {
   const { showToast } = useToast()
   const [turmas, setTurmas] = useState<Turma[]>([])
   const [series, setSeries] = useState<Serie[]>([])
+  const [professores, setProfessores] = useState<Professor[]>([])
+  const [monitores, setMonitores] = useState<Monitor[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [nome, setNome] = useState("")
   const [serieId, setSerieId] = useState("")
   const [periodo, setPeriodo] = useState("manha")
+  const [professorRespId, setProfessorRespId] = useState("")
+  const [monitorRespId, setMonitorRespId] = useState("")
   const [novaSerie, setNovaSerie] = useState("")
   const [search, setSearch] = useState("")
+
+  // Para badges de ausência precisos (interligados com a tabela faltas de hoje)
+  const [ausentesHojeProf, setAusentesHojeProf] = useState<Set<string>>(new Set())
+  const [ausentesHojeMon, setAusentesHojeMon] = useState<Set<string>>(new Set())
 
   const filteredTurmas = turmas.filter((t) =>
     t.nome.toLowerCase().includes(search.toLowerCase())
@@ -58,12 +66,29 @@ function TurmasContent() {
     const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
     const eId = await getCurrentEscolaId(userData.user.id)
 
-    const [turmasRes, seriesRes] = await Promise.all([
-      supabase.from("turmas").select("*, serie:series(*)").eq("escola_id", eId),
+    const hoje = new Date().toISOString().split("T")[0]
+
+    const [turmasRes, seriesRes, profsRes, monRes, faltasRes] = await Promise.all([
+      supabase.from("turmas").select("*, serie:series(*), professor_responsavel:professores!professor_responsavel_id(*), monitor_responsavel:monitores!monitor_responsavel_id(*)").eq("escola_id", eId),
       supabase.from("series").select("*").eq("escola_id", eId).order("ordem"),
+      supabase.from("professores").select("*").eq("escola_id", eId).order("nome"),
+      supabase.from("monitores").select("*").eq("escola_id", eId).order("nome"),
+      supabase.from("faltas").select("professor_id").eq("escola_id", eId).eq("data", hoje),
     ])
-    if (turmasRes.data) setTurmas(turmasRes.data)
+    if (turmasRes.data) setTurmas(turmasRes.data as any)
     if (seriesRes.data) setSeries(seriesRes.data)
+    if (profsRes.data) setProfessores(profsRes.data)
+    if (monRes.data) setMonitores(monRes.data)
+
+    // Badges precisos baseados em faltas reais de hoje (interligação forte)
+    const profAusentes = new Set<string>()
+    ;(faltasRes.data || []).forEach((f: any) => { if (f.professor_id) profAusentes.add(f.professor_id) })
+    setAusentesHojeProf(profAusentes)
+    // Para monitores ainda não temos tabela dedicada de faltas, então usamos o status como fallback (melhor que nada)
+    const monAusentes = new Set<string>()
+    monRes.data?.forEach((m: any) => { if (m.status && m.status !== "presente") monAusentes.add(m.id) })
+    setAusentesHojeMon(monAusentes)
+
     setLoading(false)
   }, [supabase])
 
@@ -89,7 +114,14 @@ function TurmasContent() {
     const { getCurrentEscolaId } = await import("@/lib/get-escola-client")
     const eId = await getCurrentEscolaId(userData.user.id)
 
-    const data = { escola_id: eId, nome: parsed.data.nome, serie_id: parsed.data.serie_id || null, periodo: parsed.data.periodo }
+    const data = { 
+      escola_id: eId, 
+      nome: parsed.data.nome, 
+      serie_id: parsed.data.serie_id || null, 
+      periodo: parsed.data.periodo,
+      professor_responsavel_id: professorRespId || null,
+      monitor_responsavel_id: monitorRespId || null,
+    }
 
     if (editingId) {
       const { error } = await supabase.from("turmas").update(data).eq("id", editingId)
@@ -112,8 +144,10 @@ function TurmasContent() {
 
   function editTurma(t: Turma) {
     setNome(t.nome)
-    setSerieId(t.serie_id)
+    setSerieId(t.serie_id || "")
     setPeriodo(t.periodo)
+    setProfessorRespId(t.professor_responsavel_id || "")
+    setMonitorRespId(t.monitor_responsavel_id || "")
     setEditingId(t.id)
     setShowForm(true)
   }
@@ -137,6 +171,8 @@ function TurmasContent() {
     setNome("")
     setSerieId("")
     setPeriodo("manha")
+    setProfessorRespId("")
+    setMonitorRespId("")
     setEditingId(null)
     setShowForm(false)
   }
@@ -204,6 +240,27 @@ function TurmasContent() {
                     <option value="integral">Integral</option>
                   </Select>
                 </div>
+
+                {/* Responsáveis padrão da sala - usado para automação no recreio escalonado */}
+                <div className="space-y-2">
+                  <Label>Professor responsável padrão da sala</Label>
+                  <Select value={professorRespId} onChange={(e) => setProfessorRespId(e.target.value)}>
+                    <option value="">(nenhum)</option>
+                    {professores.map((p) => (
+                      <option key={p.id} value={p.id}>{p.nome}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Monitor responsável padrão da sala (creche)</Label>
+                  <Select value={monitorRespId} onChange={(e) => setMonitorRespId(e.target.value)}>
+                    <option value="">(nenhum)</option>
+                    {monitores.map((m) => (
+                      <option key={m.id} value={m.id}>{m.nome}</option>
+                    ))}
+                  </Select>
+                  <p className="text-[10px] text-indigo-300/60">Este será usado automaticamente ao atribuir a turma no recreio.</p>
+                </div>
               </div>
               <div className="flex gap-2">
                 <Button type="submit">
@@ -246,6 +303,14 @@ function TurmasContent() {
                       <Badge variant="outline">{turma.serie?.nome}</Badge>
                       <Badge variant="default">{turma.periodo}</Badge>
                     </div>
+                    {(turma.professor_responsavel || turma.monitor_responsavel) && (
+                      <div className="text-xs text-emerald-300/70 mt-1">
+                        Padrão: {turma.professor_responsavel?.nome || "—"} / {turma.monitor_responsavel?.nome || "—"}
+                        {(!!turma.professor_responsavel_id && ausentesHojeProf.has(turma.professor_responsavel_id) || !!turma.monitor_responsavel_id && ausentesHojeMon.has(turma.monitor_responsavel_id)) && (
+                          <span className="ml-1 text-red-400">(ausente hoje)</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <Button variant="ghost" size="sm" onClick={() => editTurma(turma)}>

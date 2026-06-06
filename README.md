@@ -1,51 +1,33 @@
-# ARIA — Gestão Escolar Real
+# ARIA — Gestão Escolar
 
-Sistema completo de gestão escolar (creche + ensino fundamental) feito para ser **rápido, confiável e controlado por humanos**.
+Sistema simples e rápido de gestão escolar para **creche e ensino fundamental**, feito para o diretor e a secretaria usarem todos os dias de forma direta e confiável.
 
-**Filosofia atual:**
-- Diretor e secretaria fazem **todos os cadastros, faltas, substituições e ajustes de grade manualmente** (mais seguro, auditável e rápido).
-- A **ARIA** é a assistente inteligente que **analisa, dá dicas, prevê problemas, gera relatórios e sugere** as melhores decisões. Ela **não altera dados sozinha**.
+**O que é:**  
+Uma ferramenta manual-first. Você faz tudo manualmente (cadastros, rotinas, ausências). A IA (chamada ARIA) só analisa, sugere e dá dicas — nunca toma decisões nem altera dados sozinha.
 
-## Principais melhorias recentes (executadas)
-- Modelo de tenancy correto (suporte a múltiplos usuários por escola: diretor + secretaria etc) + RLS consertado.
-- IA removida da execução automática de ações (pivot para advisor).
-- Chat da ARIA agora foca em análise, relatórios e sugestões.
-- Páginas de CRUD melhoradas (busca, confirmações, resolução segura de escola).
-- Resolução de `escola_id` via `escola_membros` (com fallback legacy).
+**O que ele faz de mais importante:**
+- Menu com apenas **6 seções claras** (Painel, Salas, Equipe, Rotina, Ausências, Planejamento) — fácil de entender e não se perde.
+- Cada sala tem um **Professor e Monitor padrão**.
+- **Rotina (Recreio Escalonado):** com um clique o sistema reconhece todas as salas que já têm padrão cadastrado e gera automaticamente um planejamento balanceado e seguro (máximo ~3 turmas por horário).
+- **Ausências:** ao registrar uma falta, o sistema mostra imediatamente quais turmas ficam sem o responsável padrão, sugere substitutos que já são padrão daquelas mesmas salas, cria a substituição ligada e pode aplicar a cobertura direto nos horários de recreio de hoje.
+- Tudo conversa entre si: as turmas são a fonte da verdade → a Equipe mostra "Padrão de: ..." → as Ausências usam isso para sugerir → a Rotina evita padrões ausentes e mostra badges de cobertura → o Dashboard avisa as salas sem cobertura.
 
-## Desenvolvimento
+**Como funciona no dia a dia:**
+1. Cadastre as salas com seus Professor e Monitor padrão (uma única vez).
+2. Vá em Rotina → clique "Gerar Planejamento Escalonado Automático".
+3. Quando alguém faltar, use Ausências: o sistema faz o trabalho pesado de impacto e sugestão.
+4. Veja tudo atualizado no Painel.
 
+Rápido, auditável e pensado para o funcionamento real de creche (recreio com várias turmas, responsabilidade clara de professor + monitor, cobertura fácil).
+
+**Tecnologia:** Next.js 16 + Supabase (banco + auth + RLS).
+
+**Como rodar:**
 ```bash
 npm install
 npm run dev
 ```
 
-**Importante:** Configure `.env.local` (veja `.env.local.example` com GROQ_API_KEY + Supabase).
+Depois de subir, rode o arquivo `supabase/full_schema.sql` no SQL Editor do seu projeto Supabase (é o schema completo e único do sistema).
 
-### Após clonar / atualizar (obrigatório para o modelo novo de escola)
-1. No Supabase SQL Editor, rode a migration mais recente:
-   ```sql
-   -- Abra o arquivo:
-   supabase/migrations/00005_tenancy_members_rls_fix.sql
-   -- Cole e execute todo o conteúdo.
-   ```
-   Isso cria `escola_membros`, conserta RLS e faz backfill para contas antigas.
-
-2. Reinicie o dev server.
-
-## Como usar no dia a dia (novo modo)
-- Cadastros, faltas, grade, substituições → use as páginas do menu (rápidas e diretas).
-- Análise e inteligência → clique no botão roxo (ARIA) no canto inferior direito e converse:
-  - "Analise minha escola"
-  - "Prever faltas"
-  - "Relatório da professora Ana"
-  - "Sugestões de melhoria"
-
-## Testes da IA (analítica)
-
-```bash
-npm run test:ia
-npm run test:groq
-```
-
-O sistema foi redesenhado para ser a ferramenta real que o diretor e a secretaria vão usar todos os dias com confiança.
+Pronto. O sistema é feito para ser usado de verdade, sem enrolação.
